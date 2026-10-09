@@ -9,6 +9,7 @@ render_student_view      → odak grafiği (tıklanabilir) + Eksik Tamamlama Kar
 
 from __future__ import annotations
 
+import html
 from typing import List, Optional, Tuple
 
 import plotly.graph_objects as go
@@ -31,7 +32,7 @@ OK = "#30A46C"
 
 CSS = """
 <style>
-.block-container {padding-top: 2.2rem; max-width: 1200px;}
+.block-container {padding-top: 3.8rem; max-width: 1200px;}  /* üstteki Streamlit çubuğu başlığı kesmesin */
 .app-title {font-size: 1.75rem; font-weight: 700; color: var(--text-color); margin: 0;}
 .app-sub {color: #6B7385; margin: .15rem 0 1rem 0; font-size: .95rem;}
 .badge-row {display:flex; flex-wrap:wrap; gap:.5rem; margin:.25rem 0 1.1rem 0;}
@@ -54,6 +55,13 @@ CSS = """
          border-radius:0 8px 8px 0; font-size:.92rem; line-height:1.5;}
 .missed.mild {border-left-color:#F5A524; background: rgba(245,165,36,.07);}
 .summary-box {font-size:1.02rem; line-height:1.6;}
+table.ozet {border-collapse:collapse; width:100%; margin:.4rem 0 1rem 0; font-size:.93rem;}
+table.ozet td {padding:.42rem .7rem; border-bottom:1px solid rgba(128,128,128,.22); vertical-align:top;}
+table.ozet td:first-child {color:#6B7385; width:15rem; white-space:nowrap;}
+table.ozet td:last-child {font-weight:600;}
+.rol-kart {border:1px solid rgba(128,128,128,.28); border-radius:16px; padding:1.4rem 1.5rem 1rem; height:100%;}
+.rol-kart h3 {margin:0 0 .4rem 0; font-size:1.25rem;}
+.rol-kart p {color:#6B7385; font-size:.93rem; line-height:1.5; margin:0 0 .8rem 0; min-height:4.4rem;}
 </style>
 """
 
@@ -78,7 +86,7 @@ PRIVACY_BADGES = [
     ("📷", "Kamera görüntüsü diske yazılmaz", ""),
     ("🧠", "Kareler RAM'de işlenir ve anında atılır", ""),
     ("🚫", "Yüz tanıma / kimlik tespiti yok", ""),
-    ("🎙️", "Ses metne çevrilince silinir", ""),
+    ("🎙️", "Ses metne çevrilince silinir · yalnızca öğretmenin sesi yazılır", ""),
     ("💻", "Odak profili yalnızca bu oturumda", "info"),
 ]
 
@@ -88,7 +96,8 @@ PRIVACY_PRINCIPLES = [
     ("Uçta Anonim Analiz",
      "Yalnızca baş açısı ve göz açıklık oranından 0-100 arası soyut bir odak skoru üretilir. Kare hemen yok edilir."),
     ("Geçici Ses İşleme",
-     "Öğretmen sesi yerel Whisper ile metne çevrildiği anda geçici ses dosyası bellekten ve diskten silinir."),
+     "Ses bu cihazda yerel Whisper ile metne çevrilir ve çevrildiği anda silinir. Yalnızca öğretmenin (derste en çok "
+     "konuşan kişinin) sesi yazıya dökülür; öğrencilerin konuşmaları metne çevrilmez."),
     ("İstemci Taraflı Öğrenci Verisi",
      "Dikkat profili merkezi bir veritabanına gitmez; bu tarayıcı oturumu kapanınca kaybolur."),
     ("Buluta Yalnızca Ders İçeriği",
@@ -146,73 +155,165 @@ def _notes_to_markdown(notes: LectureNotes, lecture: Lecture) -> str:
     return "\n".join(out)
 
 
-def render_teacher_view(lecture: Lecture, notes: LectureNotes) -> None:
-    ss = st.session_state
-    approved = ss.get("notes_approved", False)
+def render_ders_ozeti(lecture: Lecture, bilgi: dict, odak: Optional[dict], threshold: float) -> None:
+    """Öğretmen: ders sonu özet tablosu (öğrenci sayısı dahil) + sınıf odağı grafiği.
+
+    bilgi: gercek_veri.ders_bilgisi() (demo için boş sözlük)
+    odak:  {"raw", "smooth", "gaps", "parts"} ya da None (odak izlenmediyse)
+    """
+    st.markdown("#### 📊 Ders özeti")
+    odak_var = bool(odak and odak.get("raw"))
+    ort = (sum(s.focus_score for s in odak["raw"]) / len(odak["raw"])) if odak_var else None
+    dusuk_sn = sum(g.duration for g, _ in odak["parts"]) if odak_var else 0.0
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Öğrenci sayısı", bilgi.get("ogrenci_sayisi") or "—",
+              help="Kameranın ders boyunca aynı anda gördüğü kişi sayısı (yüzü kameraya dönük olanlar). "
+                   "Kimlik tespiti yapılmaz; yalnızca sayılır.")
+    m2.metric("Ders süresi", fmt_t(lecture.duration))
+    m3.metric("Sınıf odak ortalaması", f"{ort:.0f}/100" if ort is not None else "—")
+    m4.metric("Odağın düştüğü süre", fmt_t(dusuk_sn) if odak_var else "—")
+
+    satirlar = [("Ders adı", lecture.title)]
+    if bilgi.get("zaman"):
+        satirlar.append(("Tarih", bilgi["zaman"]))
+    satirlar.append(("Ders süresi", f"{fmt_t(lecture.duration)} dk"))
+    if bilgi:
+        satirlar.append(("Derse katılan öğrenci sayısı",
+                         f"{bilgi['ogrenci_sayisi']} kişi" if bilgi.get("ogrenci_sayisi")
+                         else ("ölçülemedi" if bilgi.get("odak_izlendi") else "izlenmedi (kamera kapalıydı)")))
+        satirlar.append(("Sınıf odağı", f"ortalama {ort:.0f}/100 · {len(odak['gaps'])} bölümde düşüş" if odak_var
+                         else "izlenmedi"))
+        if not bilgi.get("ses_kaydedildi", True):
+            satirlar.append(("Ses", "dinlenmedi (mikrofon kapalıydı)"))
+        else:
+            a = bilgi.get("ayrim") or {}
+            if a.get("uygulandi") and a.get("atlanan_parca"):
+                ses = (f"yalnızca öğretmen metne çevrildi: {a.get('ogretmen_sn', 0):.0f} sn öğretmen · "
+                       f"başka seslere ait {a['atlanan_parca']} parça ({a.get('atlanan_sn', 0):.0f} sn) atlandı")
+            elif a.get("uygulandi"):
+                ses = "kayıttaki konuşmanın tamamı öğretmene ait (başka ses bulunmadı)"
+            elif a:
+                ses = f"öğretmen sesi ayrılamadı ({a.get('neden') or 'bilinmiyor'}); tüm konuşma metne çevrildi"
+            else:
+                ses = "metne çevrildi"
+            satirlar.append(("Ses", ses))
+            if bilgi.get("duzeltilen_satir"):
+                satirlar.append(("Transkript", f"{bilgi['duzeltilen_satir']} satırda yanlış duyulan kelime düzeltildi"))
+    else:
+        satirlar.append(("Kaynak", "Demo verisi (gerçek kayıt değil)"))
+    st.markdown("<table class='ozet'>" + "".join(
+        f"<tr><td>{html.escape(str(k))}</td><td>{html.escape(str(v))}</td></tr>" for k, v in satirlar)
+        + "</table>", unsafe_allow_html=True)
+
+    if odak_var:
+        st.markdown("##### Ders boyunca sınıf odağı")
+        st.caption("Gölgeli alanlar sınıf ortalamasının eşik altına düştüğü anlar; üstte o sırada anlatılan bölüm yazar.")
+        fig = build_focus_figure(odak["raw"], odak["smooth"], odak["gaps"], lecture, threshold, None,
+                                 odak["parts"], markers=False)
+        st.plotly_chart(fig, width="stretch", key="sinif_odak_grafigi", config={"displayModeBar": False})
+        if odak["gaps"]:
+            st.markdown("**Odağın düştüğü bölümler:** " + " · ".join(
+                f"{g.topic} ({fmt_t(g.start_time)}–{fmt_t(g.end_time)}, ort. {g.mean_focus:.0f})" for g in odak["gaps"]))
+    elif bilgi and not bilgi.get("odak_izlendi"):
+        st.info("Bu derste sınıf odağı izlenmedi (başlatırken kamera kapalı seçildi).")
+
+
+def render_teacher_view(lecture: Lecture, notes: LectureNotes, approved: bool, on_approve, on_revoke) -> None:
+    """Öğretmen: notları düzenle, onayla ve öğrencilerle paylaş.
+
+    approved:   bu ders şu anda paylaşılmış mı (dosyadan okunur; tüm oturumlarda aynı)
+    on_approve: (LectureNotes) -> None ; on_revoke: () -> None
+    """
+    # Kutu anahtarları derse özgü: yeni bir ders yüklendiğinde eski dersin metni kutularda kalmaz
+    did = lecture.lecture_id
 
     head, status = st.columns([3, 1])
     with head:
-        st.subheader(notes.title)
+        st.subheader("📝 " + notes.title)
         st.caption(f"{lecture.subject} · {lecture.grade_level or ''} · {fmt_t(lecture.duration)} dk · "
                    f"{len(lecture.segments)} bölüm")
     with status:
-        cls, txt = ("done", "✓ Onaylandı") if approved else ("wait", "● Onay bekliyor")
+        cls, txt = ("done", "✓ Öğrencilerle paylaşıldı") if approved else ("wait", "● Onay bekliyor")
         st.markdown(f'<div style="text-align:right;margin-top:.6rem"><span class="status {cls}">{txt}</span></div>',
                     unsafe_allow_html=True)
 
     st.markdown("**Ders özeti**")
-    summary = st.text_area("Ders özeti", notes.summary, height=90, key="note_summary",
+    summary = st.text_area("Ders özeti", notes.summary, height=90, key=f"note_summary_{did}",
                            label_visibility="collapsed", disabled=approved)
 
     st.markdown("#### Bölüm notları")
-    st.caption("Notlar düzenlenebilir. Onaydan sonra kilitlenir ve paylaşıma hazır hale gelir.")
+    st.caption("Notlar düzenlenebilir. Onayladığınızda kilitlenir ve öğrenci arayüzünde görünür.")
     edited_sections = []
     for i, sec in enumerate(notes.sections):
         seg = lecture.segments[i] if i < len(lecture.segments) else None
         label = f"{i + 1}. {sec.topic}" + (f"  ·  {fmt_t(seg.start_time)}–{fmt_t(seg.end_time)}" if seg else "")
         with st.expander(label, expanded=(i == 0)):
-            content = st.text_area("İçerik", sec.content, height=130, key=f"note_sec_{i}",
+            content = st.text_area("İçerik", sec.content, height=130, key=f"note_sec_{did}_{i}",
                                    label_visibility="collapsed", disabled=approved)
             if sec.key_terms:
-                st.markdown("".join(f'<span class="chip">{t}</span>' for t in sec.key_terms),
+                st.markdown("".join(f'<span class="chip">{html.escape(t)}</span>' for t in sec.key_terms),
                             unsafe_allow_html=True)
             if seg:
                 with st.popover("Ham transkripti göster"):
-                    st.caption("STT çıktısı (düzenlenmemiş)")
+                    st.caption("Ses tanıma çıktısı (yalnızca öğretmenin sesi)")
                     st.write(seg.transcript)
             edited_sections.append(sec.model_copy(update={"content": content}))
 
-    st.markdown("#### Tahta çözümleri")
     edited_board = []
+    if notes.board_solutions:
+        st.markdown("#### Örnekler ve çözümler")
     for i, sol in enumerate(notes.board_solutions):
         lines = sol.count("\n") + 1
-        edited_board.append(st.text_area(f"Çözüm {i + 1}", sol, key=f"note_board_{i}", disabled=approved,
+        edited_board.append(st.text_area(f"Çözüm {i + 1}", sol, key=f"note_board_{did}_{i}", disabled=approved,
                                           height=max(68, 28 * lines + 20)))
 
     final = notes.model_copy(update={"summary": summary, "sections": edited_sections,
                                      "board_solutions": edited_board, "approved": approved})
 
     st.divider()
-    c1, c2, c3 = st.columns([1.2, 1.2, 2])
+    c1, c2, c3 = st.columns([1.4, 1.2, 2])
     with c1:
         if not approved:
-            if st.button("✓ Onayla ve paylaşıma hazırla", type="primary", width="stretch"):
-                ss.notes_approved = True
+            if st.button("✓ Onayla ve öğrencilerle paylaş", type="primary", width="stretch"):
+                on_approve(final)
                 st.rerun()
         else:
-            if st.button("↺ Onayı geri al", width="stretch"):
-                ss.notes_approved = False
+            if st.button("↺ Paylaşımı geri al", width="stretch"):
+                on_revoke()
                 st.rerun()
     with c2:
         st.download_button("⬇ Notları indir (.md)", _notes_to_markdown(final, lecture),
-                           file_name=f"{lecture.lecture_id}-ders-notu.md", mime="text/markdown",
-                           disabled=not approved, width="stretch")
+                           file_name=f"{lecture.lecture_id}-ders-notu.md", mime="text/markdown", width="stretch")
     with c3:
         if approved:
-            st.success("Notlar onaylandı. Öğrencilerle paylaşılabilir.")
+            st.success("Notlar paylaşıldı: öğrenci arayüzünde görünüyor.")
+        else:
+            st.caption("Onaylayana kadar öğrenciler bu dersin notlarını göremez.")
 
     with st.expander("Tam ham transkript (karşılaştırma için)"):
         st.text(lecture.full_transcript)
+
+
+def render_student_notes(lecture: Lecture, notes: LectureNotes) -> None:
+    """Öğrenci: öğretmenin onayladığı notlar (salt okunur)."""
+    st.subheader(notes.title)
+    st.caption(f"{lecture.subject} · {lecture.grade_level or ''} · {fmt_t(lecture.duration)} dk")
+    if notes.summary:
+        st.markdown(f"<div class='summary-box'>{html.escape(notes.summary)}</div>", unsafe_allow_html=True)
+        st.write("")
+    for i, sec in enumerate(notes.sections):
+        with st.expander(f"{i + 1}. {sec.topic}", expanded=True):
+            st.text(sec.content)
+            if sec.key_terms:
+                st.markdown("".join(f'<span class="chip">{html.escape(t)}</span>' for t in sec.key_terms),
+                            unsafe_allow_html=True)
+    if notes.board_solutions:
+        st.markdown("#### Örnekler ve çözümler")
+        for i, sol in enumerate(notes.board_solutions, 1):
+            st.text(f"{i}. {sol}")
+    st.download_button("⬇ Notları indir (.md)", _notes_to_markdown(notes, lecture),
+                       file_name=f"{lecture.lecture_id}-ders-notu.md", mime="text/markdown")
 
 
 # ---------------------------------------------------------------------------
@@ -220,8 +321,9 @@ def render_teacher_view(lecture: Lecture, notes: LectureNotes) -> None:
 # ---------------------------------------------------------------------------
 def build_focus_figure(raw: List[FocusSample], smooth: List[FocusSample], gaps: List[GapWindow],
                        lecture: Lecture, threshold: float, selected: Optional[int],
-                       parts: Optional[List[Tuple[GapWindow, int]]] = None) -> go.Figure:
-    """gaps: kart başına birleşik aralık; parts: (gerçek düşüş aralığı, kart indeksi)."""
+                       parts: Optional[List[Tuple[GapWindow, int]]] = None, markers: bool = True) -> go.Figure:
+    """gaps: kart başına birleşik aralık; parts: (gerçek düşüş aralığı, kart indeksi).
+    markers=False: öğretmen görünümü (kart işaretleri yok, yalnızca düşüş aralıkları)."""
     if parts is None:
         parts = [(g, i) for i, g in enumerate(gaps)]
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.84, 0.16], vertical_spacing=0.04)
@@ -261,7 +363,7 @@ def build_focus_figure(raw: List[FocusSample], smooth: List[FocusSample], gaps: 
                   annotation_font=dict(size=10, color=MUTED))
 
     # Kart işaretleri: tıklanınca ilgili kart açılır
-    if gaps:
+    if gaps and markers:
         fig.add_trace(go.Scatter(
             x=[_marker_x(i, parts) for i in range(len(gaps))], y=[90] * len(gaps),
             mode="markers+text", name="Eksik Tamamlama Kartı",
@@ -280,10 +382,12 @@ def build_focus_figure(raw: List[FocusSample], smooth: List[FocusSample], gaps: 
         colorscale=[[0, GAP_SEVERE], [0.35, GAP_MILD], [0.55, "#E9E3B5"], [1, OK]],
         hovertemplate="%{x:.0f} sn · odak %{z:.0f}<extra></extra>"), row=2, col=1)
 
-    ticks = list(range(0, int(lecture.duration) + 1, 60))
+    # Eksen işaretleri: ders ne kadar kısa/uzun olursa olsun ~6-10 işaret
+    adim = next((a for a in (5, 10, 15, 30, 60, 120, 300, 600) if lecture.duration / a <= 10), 900)
+    ticks = list(range(0, int(lecture.duration) + 1, adim))
     fig.update_xaxes(tickvals=ticks, ticktext=[fmt_t(t) for t in ticks], showgrid=False,
                      range=[0, lecture.duration], row=2, col=1)
-    fig.update_xaxes(showgrid=False, range=[0, lecture.duration], row=1, col=1)
+    fig.update_xaxes(showgrid=False, range=[0, lecture.duration], showticklabels=False, row=1, col=1)
     fig.update_yaxes(range=[0, 110], tickvals=[0, 25, 50, 75, 100], gridcolor="rgba(128,128,128,.15)",
                      title_text="Odak", row=1, col=1)
     fig.update_yaxes(showticklabels=False, row=2, col=1)
@@ -335,9 +439,14 @@ def _handle_chart_click(event, parts: List[Tuple[GapWindow, int]], lecture: Lect
 # ---------------------------------------------------------------------------
 # Öğrenci görünümü: kartlar ve quiz
 # ---------------------------------------------------------------------------
-def _render_quiz(card_idx: int, card: RecoveryCard) -> None:
+def _quiz_key(gap: GapWindow, qi: int) -> str:
+    """Cevap anahtarı: ders + konu bölümü + soru. Kart sırası değişse de (eşik kaydırıcı) cevap doğru kartta kalır."""
+    return f"quiz_{st.session_state.get('focus_lecture_id', '')}_{gap.segment_index}_{qi}"
+
+
+def _render_quiz(gap: GapWindow, card: RecoveryCard) -> None:
     for qi, q in enumerate(card.questions):
-        key = f"quiz_{card_idx}_{qi}"
+        key = _quiz_key(gap, qi)
         st.markdown(f"**Soru {qi + 1}.** {q.question}")
         choice = st.radio(f"Soru {qi + 1}", q.options, index=None, key=key, label_visibility="collapsed")
         if choice is not None:
@@ -350,13 +459,39 @@ def _render_quiz(card_idx: int, card: RecoveryCard) -> None:
             st.write("")
 
 
-def quiz_progress(cards: List[RecoveryCard]) -> tuple[int, int, int]:
+def render_genel_quiz(sorular: List[dict], ders_id: str) -> None:
+    """Gerçek derslerde Gemini'nin hazırladığı ders geneli mini quiz (notlar.json -> quiz)."""
+    if not sorular:
+        return
+    st.markdown("#### 📝 Ders sonu mini quiz")
+    st.caption("Dersin tamamından sorular. Cevabını seçince doğrusu ve açıklaması görünür.")
+    dogru_sayisi = yanit_sayisi = 0
+    with st.container(border=True):
+        for i, q in enumerate(sorular):
+            st.markdown(f"**{i + 1}.** {q['soru']}")
+            secim = st.radio(f"Quiz {i + 1}", range(len(q["secenekler"])), index=None,
+                             format_func=lambda j, q=q: q["secenekler"][j],
+                             key=f"quiz_genel_{ders_id}_{i}", label_visibility="collapsed")
+            if secim is not None:
+                yanit_sayisi += 1
+                if secim == q["dogru_cevap"]:
+                    dogru_sayisi += 1
+                    st.success("**Doğru!** " + q["aciklama"])
+                else:
+                    st.error(f"**Yanlış.** Doğru cevap: {q['secenekler'][q['dogru_cevap']]}")
+                    if q["aciklama"]:
+                        st.info(q["aciklama"])
+        if yanit_sayisi == len(sorular):
+            st.markdown(f"**Sonuç: {dogru_sayisi}/{len(sorular)} doğru**")
+
+
+def quiz_progress(cards: List[RecoveryCard], gaps: List[GapWindow]) -> tuple[int, int, int]:
     total = sum(len(c.questions) for c in cards)
     answered = correct = 0
-    for ci, c in enumerate(cards):
+    for c, g in zip(cards, gaps):
         for qi, q in enumerate(c.questions):
-            v = st.session_state.get(f"quiz_{ci}_{qi}")
-            if v is not None:
+            v = st.session_state.get(_quiz_key(g, qi))
+            if v is not None and v in q.options:
                 answered += 1
                 correct += int(q.options.index(v) == q.correct_index)
     return answered, correct, total
@@ -387,24 +522,24 @@ def render_card(idx: int, card: RecoveryCard, gap: GapWindow) -> None:
             st.markdown(f"<div style='text-align:right;color:#6B7385;font-size:.85rem;margin-top:.3rem'>"
                         f"⏱ {_card_minutes(card)}</div>", unsafe_allow_html=True)
 
-        st.markdown(f"<div class='summary-box'>{card.summary}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='summary-box'>{html.escape(card.summary)}</div>", unsafe_allow_html=True)
         if card.key_points:
             st.markdown("**Akılda kalsın**")
             st.markdown("\n".join(f"- {p}" for p in card.key_points))
 
         with st.expander("Derste o an ne anlatılıyordu? (transkript)"):
-            st.markdown(f"<div class='missed {'mild' if col == GAP_MILD else ''}'>…{gap.missed_transcript}…</div>",
+            st.markdown(f"<div class='missed {'mild' if col == GAP_MILD else ''}'>…{html.escape(gap.missed_transcript)}…</div>",
                         unsafe_allow_html=True)
 
         st.markdown("##### Pekiştirme soruları")
-        _render_quiz(idx, card)
+        _render_quiz(gap, card)
 
 
 def render_student_view(lecture: Lecture, raw: List[FocusSample], smooth: List[FocusSample],
                         gaps: List[GapWindow], parts: List[Tuple[GapWindow, int]],
                         cards: List[RecoveryCard], threshold: float, stats: dict) -> None:
     ss = st.session_state
-    answered, correct, total = quiz_progress(cards)
+    answered, correct, total = quiz_progress(cards, gaps)
 
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Ortalama odak", f"{stats['mean']:.0f}/100")

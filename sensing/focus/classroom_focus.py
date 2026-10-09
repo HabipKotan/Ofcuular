@@ -369,6 +369,15 @@ def saatlik_ozet(kayitlar: list[tuple[datetime, float]]) -> list[tuple[str, floa
     return [(etiket, round(sum(v) / len(v), 1)) for etiket, v in gruplar.items()]
 
 
+def ogrenci_sayisi(yuz_ortalamalari: list) -> int:
+    """Derste kameranin gordugu kisi sayisi: donemlerdeki ortalama yuz sayisinin ust ucu (%95'lik deger).
+    Tek tuk yanlis algilama sayiyi sisirmez; ogrenciler ara sira donse/egilse de sayi dusmez."""
+    d = sorted(v for v in yuz_ortalamalari if v and v > 0)
+    if not d:
+        return 0
+    return max(1, int(round(d[min(len(d) - 1, math.ceil(0.95 * len(d)) - 1)])))
+
+
 def oturum_ozeti(oturum: Oturum, ders: str) -> dict:
     """Panelin / ses modulunun okuyacagi sayisal ozet."""
     iyi = [k for k in oturum.kayitlar if k.guvenilir]
@@ -393,6 +402,7 @@ def oturum_ozeti(oturum: Oturum, ders: str) -> dict:
         baslangic=oturum.kayitlar[0].baslangic.isoformat(timespec="seconds"),
         bitis=oturum.kayitlar[-1].bitis.isoformat(timespec="seconds"),
         genel_ortalama=round(sum(k.skor for k in iyi) / len(iyi), 1),
+        ogrenci_sayisi=ogrenci_sayisi([k.ortalama_yuz for k in iyi]),
         saate_gore=[{"saat": s, "skor": v} for s, v in satirlar],
         en_dusuk=dict(zip(("saat", "skor"), min(satirlar, key=lambda x: x[1]))),
         en_yuksek=dict(zip(("saat", "skor"), max(satirlar, key=lambda x: x[1]))),
@@ -418,6 +428,7 @@ def ozet_yazdir(ozet: dict) -> None:
     print(f" En dusuk          : {ozet['en_dusuk']['saat']}  ({ozet['en_dusuk']['skor']})")
     print(f" En yuksek         : {ozet['en_yuksek']['saat']}  ({ozet['en_yuksek']['skor']})")
     n = ozet["neden_oranlari"]
+    print(f" Ogrenci sayisi    : {ozet.get('ogrenci_sayisi', 0)}  (kameranin gordugu kisi)")
     print(f" Ortalama oranlar  : yana bakan %{n['yana'] * 100:.0f} | basi egik %{n['egik'] * 100:.0f}"
           f" | gozu kapali %{n['kapali'] * 100:.0f}")
     e = ozet["esneme"]

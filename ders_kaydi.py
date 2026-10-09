@@ -16,6 +16,7 @@ Akış:
   5) Durum dosyası "bitti" olur; arayüz yeni dersi otomatik gösterir.
 
 Durum dosyası (kayit_durumu.json): {"durum": "baslatiliyor|kayit|isleniyor|bitti|hata", "mesaj", ...}
+Günlük (kayit_gunlugu.txt): bu sürecin tüm çıktısı; hata olursa panel son satırları gösterir.
 """
 
 from __future__ import annotations
@@ -45,7 +46,48 @@ VERI = Path(os.getenv("GERCEK_VERI_KLASORU") or PROJE)
 DURUM = VERI / "kayit_durumu.json"
 DURDUR = VERI / "kayit_durdur.flag"
 SES = VERI / "ders.wav"
+GUNLUK = VERI / "kayit_gunlugu.txt"   # bu sürecin tüm çıktısı (terminal penceresi kapanınca da okunabilsin)
 ORNEKLEME = 16000
+
+
+class _Cift:
+    """Yazılanı hem terminale hem günlük dosyasına gönderir."""
+
+    def __init__(self, asil, dosya):
+        self._asil, self._dosya = asil, dosya
+
+    def write(self, metin):
+        for hedef in (self._asil, self._dosya):
+            try:
+                hedef.write(metin)
+                hedef.flush()
+            except Exception:
+                pass
+        return len(metin)
+
+    def flush(self):
+        for hedef in (self._asil, self._dosya):
+            try:
+                hedef.flush()
+            except Exception:
+                pass
+
+    def __getattr__(self, ad):
+        return getattr(self._asil, ad)
+
+
+def gunluk_baslat() -> None:
+    """Elle (terminalden) çalıştırıldığında çıktıyı günlüğe de yazar. Panelden başlatıldığında çıktı zaten
+    günlük dosyasına yönlendirilmiştir (ui/ders_kontrol.py); o durumda ikinci kez yazılmaz."""
+    try:
+        if not (sys.stdout and sys.stdout.isatty()):
+            return
+        dosya = open(GUNLUK, "w", encoding="utf-8", errors="replace")
+        dosya.write(f"=== Ders kaydı günlüğü · {datetime.now():%d.%m.%Y %H:%M:%S} ===\n")
+        sys.stdout = _Cift(sys.stdout, dosya)
+        sys.stderr = _Cift(sys.stderr, dosya)
+    except Exception:
+        pass  # günlük yazılamıyorsa kayıt yine de çalışsın
 
 _durum_kilidi = threading.Lock()
 _durum: dict = {}
@@ -150,10 +192,21 @@ _mikrofon: Mikrofon | None = None
 # İşleme adımları
 # ---------------------------------------------------------------------------
 def calistir_adim(ad: str, komut: list[str]) -> None:
+    """Alt adımı çalıştırır; çıktısını satır satır terminale + günlüğe aktarır.
+    Başarısız olursa hata mesajına alt adımın son satırını (asıl nedeni) ekler."""
     print(f"\n=== {ad} ===")
-    sonuc = subprocess.run(komut, cwd=VERI, env={**os.environ, "PYTHONIOENCODING": "utf-8"})
-    if sonuc.returncode != 0:
-        raise RuntimeError(f"{ad} başarısız oldu (kod {sonuc.returncode}). Ayrıntı terminalde.")
+    surec = subprocess.Popen(komut, cwd=VERI, env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1"},
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                             encoding="utf-8", errors="replace")
+    son_satirlar: list[str] = []
+    for satir in surec.stdout:
+        print(satir, end="")
+        if satir.strip():
+            son_satirlar = (son_satirlar + [satir.strip()])[-5:]
+    kod = surec.wait()
+    if kod != 0:
+        neden = son_satirlar[-1] if son_satirlar else f"kod {kod}"
+        raise RuntimeError(f"{ad} adımı başarısız oldu: {neden[:300]}")
 
 
 def en_yeni_odak_csv() -> Path | None:
@@ -161,35 +214,63 @@ def en_yeni_odak_csv() -> Path | None:
     return max(adaylar, key=lambda d: d.stat().st_mtime) if adaylar else None
 
 
-def notlari_uret(odak_yolu: Path | None) -> None:
-    durum_yaz(durum="isleniyor", mesaj="Notlar ve odak analizi hazırlanıyor (Gemini)…", adim=3)
+def notlari_uret(odak_yolu: Path | None, konu: str = "", ses: bool = True, odak: bool = True) -> None:
+    """ses=False: yalnızca odak özeti (yapay zekâ çağrısı yok). odak=False: notlar odak verisi olmadan."""
+    mesaj = "Notlar ve odak analizi hazırlanıyor (Gemini)…" if ses else "Sınıf odağı özeti hazırlanıyor…"
+    durum_yaz(durum="isleniyor", mesaj=mesaj, adim=3)
     komut = [sys.executable, str(PROJE / "ses_hatti" / "notlar.py")]
-    if odak_yolu and odak_yolu.exists():
+    if konu:
+        komut += ["--konu", konu]
+    if not ses:
+        komut.append("--ses-yok")
+    if odak and odak_yolu and odak_yolu.exists():
         komut += ["--odak", str(odak_yolu)]
+    else:
+        komut.append("--odak-yok")  # önceki derslerin ölçümleri bu derse karışmasın
     calistir_adim("Notlar", komut)
     durum_yaz(durum="bitti", mesaj="Ders işlendi", adim=4, bitis=time.time())
     print("\nBitti. Arayüz yeni dersi gösterecek.")
 
 
 def sadece_notlar() -> None:
-    """Kayıt ve transkript var ama not adımı yarıda kaldıysa: yalnızca notları yeniden üretir."""
+    """Kayıt ve transkript var ama not adımı yarıda kaldıysa: yalnızca notları yeniden üretir.
+    Son kaydın seçenekleri (konu, ses / odak açık mı) durum dosyasından okunur."""
+    gunluk_baslat()
     DURDUR.unlink(missing_ok=True)
-    durum_yaz(durum="isleniyor", mesaj="Notlar yeniden hazırlanıyor…", adim=3, pid=os.getpid())
+    try:
+        onceki = json.loads(DURUM.read_text(encoding="utf-8"))
+    except Exception:
+        onceki = {}
+    konu, odak = onceki.get("konu") or "", onceki.get("odak", True)
+    durum_yaz(durum="isleniyor", mesaj="Notlar yeniden hazırlanıyor…", adim=3, pid=os.getpid(),
+              konu=konu, ses=True, odak=odak)
     threading.Thread(target=nabiz, daemon=True).start()
     try:
         if not (VERI / "transkript.json").exists():
             raise RuntimeError("transkript.json bulunamadı; dersi yeniden kaydedin.")
-        notlari_uret(en_yeni_odak_csv())
+        odak_yolu = Path(onceki["odak_csv"]) if onceki.get("odak_csv") else en_yeni_odak_csv()
+        notlari_uret(odak_yolu if odak else None, konu, ses=True, odak=odak)
     except (Exception, SystemExit) as e:
         durum_yaz(durum="hata", mesaj=str(e) or e.__class__.__name__)
         print(f"HATA: {e}")
         sys.exit(1)
 
 
+def durdurulana_kadar_bekle() -> None:
+    """Kamera kullanılmayan derslerde: 'Dersi Bitir' (durdurma bayrağı) gelene kadar bekler."""
+    print("Kayıt sürüyor (kamera kapalı). Bitirmek için paneldeki 'Dersi Bitir' butonuna basın.")
+    while not DURDUR.exists():
+        time.sleep(0.3)
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description="Kamera + mikrofon ile ders kaydı ve otomatik not üretimi")
-    p.add_argument("--konu", default="", help="Ders konusu (Whisper ipucu ve kayıt etiketi)")
+    p.add_argument("--konu", default="", help="Ders adı / konusu (Whisper ipucu, not başlığı ve kayıt etiketi)")
     p.add_argument("--kamera", type=int, default=0)
+    p.add_argument("--ses-yok", action="store_true",
+                   help="Mikrofonu açma: ses dinlenmez, metne çevrilmez, not üretilmez (yalnızca sınıf odağı)")
+    p.add_argument("--odak-yok", action="store_true",
+                   help="Kamerayı açma: sınıf odağı izlenmez (yalnızca ses -> metin -> notlar)")
     p.add_argument("--yuz-goster", action="store_true", help="Önizlemede yüzleri bulanıklaştırma")
     p.add_argument("--sesi-sakla", action="store_true", help="İşlendikten sonra ders.wav'ı silme")
     p.add_argument("--sadece-notlar", action="store_true",
@@ -197,73 +278,109 @@ def main() -> None:
     args = p.parse_args()
     if args.sadece_notlar:
         return sadece_notlar()
+    ses_var, odak_var = not args.ses_yok, not args.odak_yok
+    if not ses_var and not odak_var:
+        p.error("Ses ve odak izlemenin ikisi birden kapatılamaz; en az biri açık olmalı.")
 
-    DURDUR.unlink(missing_ok=True)
-    durum_yaz(durum="baslatiliyor", mesaj="Kamera ve mikrofon hazırlanıyor…", konu=args.konu,
-              pid=os.getpid(), baslangic=None)
+    gunluk_baslat()
+    # Eski bir durdurma bayrağı kaldıysa temizle; son saniyelerde (bu süreç açılırken) basılmışsa koru
+    try:
+        if time.time() - DURDUR.stat().st_mtime > 15:
+            DURDUR.unlink(missing_ok=True)
+    except OSError:
+        pass
+    hazirlanan = " ve ".join(x for x, acik in (("Kamera", odak_var), ("mikrofon", ses_var)) if acik)
+    durum_yaz(durum="baslatiliyor", mesaj=f"{hazirlanan} hazırlanıyor…", konu=args.konu, ses=ses_var, odak=odak_var,
+              pid=os.getpid(), baslangic=None, odak_csv=None, mikrofon=None, ses_seviyesi=None)
     threading.Thread(target=nabiz, daemon=True).start()
 
-    from sensing.focus import classroom_focus as kamera_modulu
+    kamera_modulu = None
+    try:  # eksik paket (opencv / mediapipe / sounddevice) burada ortaya çıkar: panele açık bir mesaj gitsin
+        if odak_var:
+            import cv2  # noqa: F401
+            import mediapipe  # noqa: F401
+            from sensing.focus import classroom_focus as kamera_modulu
+        if ses_var:
+            import sounddevice  # noqa: F401
+    except Exception as e:
+        durum_yaz(durum="hata", mesaj=f"Gerekli paket yüklenemedi ({e}). Proje klasöründe şunu çalıştırın: "
+                                      "python -m pip install -r requirements.txt")
+        print(f"HATA: {e}")
+        sys.exit(1)
 
     global _mikrofon
-    mikrofon = _mikrofon = Mikrofon()
+    mikrofon = Mikrofon()
+    if ses_var:
+        _mikrofon = mikrofon  # nabız, mikrofon seviyesini panele bildirir
     odak_csv: dict = {}
     ses_kaydedildi = False
 
-    def kamera_basladi(_saat):
-        mikrofon.baslat()  # ölçüm saatiyle aynı anda
+    def kayit_basladi(_saat=None):
+        """Ölçüm saatinin sıfırlandığı an: ses de aynı anda başlar (ikisi aynı 0. saniyeyi paylaşır)."""
+        if ses_var:
+            mikrofon.baslat()
         durum_yaz(durum="kayit", mesaj="Ders kaydediliyor", baslangic=time.time(),
-                  mikrofon=mikrofon.cihaz_adi, ses_seviyesi=0)
-
-    kamera_modulu.BASLANGIC_KANCASI = kamera_basladi
-    kamera_modulu.DURDUR_DOSYASI = DURDUR
-    kamera_modulu.CSV_KANCASI = lambda yol: odak_csv.update(yol=Path(yol))
+                  mikrofon=mikrofon.cihaz_adi if ses_var else None, ses_seviyesi=0 if ses_var else None)
 
     try:
-        # --- 1) Kayıt (kamera döngüsü burada döner; DURDUR dosyası ya da 'q' ile biter) ---
-        kamera_argv = ["classroom_focus", "--klasor", str(VERI / "kayitlar"), "--kamera", str(args.kamera),
-                       "--grafik-yok", "--olay-sure", "10"]
-        if args.konu:
-            kamera_argv += ["--ders", args.konu]
-        if args.yuz_goster:
-            kamera_argv.append("--yuz-goster")
-        eski_argv = sys.argv
-        sys.argv = kamera_argv
-        try:
-            kamera_modulu.main()
-        finally:
-            sys.argv = eski_argv
+        # --- 1) Kayıt ---
+        if odak_var:
+            # Kamera döngüsü burada döner; DURDUR dosyası ya da önizleme penceresinde 'q' ile biter
+            kamera_modulu.BASLANGIC_KANCASI = kayit_basladi
+            kamera_modulu.DURDUR_DOSYASI = DURDUR
+            kamera_modulu.CSV_KANCASI = lambda yol: (odak_csv.update(yol=Path(yol)), durum_yaz(odak_csv=str(yol)))
+            kamera_argv = ["classroom_focus", "--klasor", str(VERI / "kayitlar"), "--kamera", str(args.kamera),
+                           "--grafik-yok", "--olay-sure", "10",
+                           "--max-yuz", os.getenv("KAMERA_MAX_YUZ") or "30"]  # öğrenci sayısı için geniş tut
+            if args.konu:
+                kamera_argv += ["--ders", args.konu]
+            if args.yuz_goster:
+                kamera_argv.append("--yuz-goster")
+            eski_argv = sys.argv
+            sys.argv = kamera_argv
+            try:
+                kamera_modulu.main()
+            finally:
+                sys.argv = eski_argv
+        else:
+            kayit_basladi()
+            durdurulana_kadar_bekle()
 
-        # --- 2) Sesi kaydet ---
-        durum_yaz(durum="isleniyor", mesaj="Ses kaydı kaydediliyor…", adim=1)
-        sure = mikrofon.durdur_ve_kaydet(SES)
-        ses_kaydedildi = True
-        print(f"Ses kaydedildi: {SES} ({sure:.0f} sn)")
-        if sure < 5:
-            raise RuntimeError("Ders çok kısa ya da mikrofon ses almadı (5 saniyeden kısa kayıt).")
+        if ses_var:
+            # --- 2) Sesi kaydet ---
+            durum_yaz(durum="isleniyor", mesaj="Ses kaydı kaydediliyor…", adim=1)
+            sure = mikrofon.durdur_ve_kaydet(SES)
+            ses_kaydedildi = True
+            print(f"Ses kaydedildi: {SES} ({sure:.0f} sn)")
+            if sure < 5:
+                raise RuntimeError("Ders çok kısa ya da mikrofon ses almadı (5 saniyeden kısa kayıt).")
 
-        # --- 3) Ses -> metin ---
-        durum_yaz(mesaj="Ses metne çevriliyor (Whisper)…", adim=2)
-        komut = [sys.executable, str(PROJE / "ses_hatti" / "transkript.py"), str(SES)]
-        if args.konu:
-            komut += ["--konu", args.konu]
-        calistir_adim("Transkript", komut)
-        transkript = json.loads((VERI / "transkript.json").read_text(encoding="utf-8"))
-        if not transkript:
-            raise RuntimeError("Kayıtta konuşma algılanamadı. Mikrofonu kontrol edip tekrar deneyin.")
-        if not args.sesi_sakla:
-            SES.unlink(missing_ok=True)  # KVKK: ses metne çevrildi, ham ses silinir
+            # --- 3) Ses -> metin (öğretmenin sesi ayrılır, yalnızca o çevrilir) ---
+            durum_yaz(mesaj="Öğretmenin sesi ayrılıyor ve metne çevriliyor (Whisper)…", adim=2)
+            komut = [sys.executable, str(PROJE / "ses_hatti" / "transkript.py"), str(SES)]
+            if args.konu:
+                komut += ["--konu", args.konu]
+            calistir_adim("Transkript", komut)
+            transkript = json.loads((VERI / "transkript.json").read_text(encoding="utf-8"))
+            if not transkript:
+                raise RuntimeError("Kayıtta konuşma algılanamadı. Mikrofonu kontrol edip tekrar deneyin.")
+            if not args.sesi_sakla:
+                SES.unlink(missing_ok=True)  # KVKK: ses metne çevrildi, ham ses silinir
+        elif not odak_csv.get("yol"):
+            raise RuntimeError("Sınıf odağı ölçülemedi (kamera kaydı oluşmadı).")
 
-        # --- 4) Metin + odak -> notlar ---
-        notlari_uret(odak_csv.get("yol"))
+        # --- 4) Notlar (ses varsa metin + odak; yoksa yalnızca odak özeti) ---
+        notlari_uret(odak_csv.get("yol"), args.konu, ses=ses_var, odak=odak_var)
     except (Exception, SystemExit) as e:  # kamera açılamazsa classroom_focus sys.exit() çağırır
-        if not ses_kaydedildi and mikrofon.veri_var():
+        if ses_var and not ses_kaydedildi and mikrofon.veri_var():
             try:  # kayıt ortasında hata olduysa ses kaybolmasın; elle tekrar işlenebilir
                 mikrofon.durdur_ve_kaydet(VERI / f"ders_yedek_{datetime.now():%H%M%S}.wav")
             except Exception:
                 pass
         durum_yaz(durum="hata", mesaj=str(e) or e.__class__.__name__)
         print(f"HATA: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
     finally:
         DURDUR.unlink(missing_ok=True)

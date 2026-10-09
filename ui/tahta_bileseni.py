@@ -58,10 +58,11 @@ def olay_isle(olay, tek_tus: bool) -> None:
         return
     ss.tahta_son_olay = olay.get("zaman")
     d = ders_kontrol.durum_oku() or {}
-    kayit_suruyor = d.get("durum") in ("baslatiliyor", "kayit")
+    aktif = ders_kontrol.kayit_aktif(d)  # nabzı kesilmiş (çökmüş) eski bir kayıt yeni dersi engellemesin
+    kayit_suruyor = aktif and d.get("durum") in ("baslatiliyor", "kayit")
 
     if olay.get("olay") == "basladi":
-        if tek_tus and d.get("durum") not in ders_kontrol.AKTIF:
+        if tek_tus and not aktif:
             ders_kontrol._baslat(olay.get("ders", ""), ss.get("kayit_sesi_sakla", False))
             st.toast("🔴 Ders başladı: tahta, kamera ve mikrofon kaydı açık.")
         else:

@@ -103,7 +103,7 @@ Tarayıcınızda `http://localhost:8501` adresine giderek demoyu inceleyebilirsi
 ## 🎙️ Gerçek Ders Modu (ses + görüntü + Gemini entegrasyonu)
 
 Arayüz artık hazır demo verisinin yanında **gerçek bir dersin** çıktılarını da gösterebilir.
-Kenar çubuğundaki **"Veri kaynağı"** seçiminden **"Gerçek ders (son kayıt)"** seçilir; demo modu yedek olarak durur.
+Öğretmen arayüzünün kenar çubuğundaki **"Gösterilen ders"** seçiminden **"Son ders kaydı"** seçilir; demo modu yedek olarak durur.
 
 ### 1. Gemini anahtarı
 `.env.example` dosyasını `.env` adıyla kopyalayın ve anahtarı yazın:
@@ -138,33 +138,90 @@ Yeni bir ders işlendiğinde kenar çubuğundaki **"🔄 Son kaydı yeniden yük
 
 ---
 
+## 👥 İki ayrı arayüz: öğretmen ve öğrenci
+
+Uygulama açılınca rol sorulur; her rol yalnızca kendi ekranını görür (adres çubuğunda `?rol=ogretmen` / `?rol=ogrenci`).
+
+- **Öğretmen:** dersi başlatır/bitirir, ders sonu özetini (öğrenci sayısı, sınıf odağı, ses bilgisi) görür,
+  notları düzenler ve **"Onayla ve öğrencilerle paylaş"** der.
+- **Öğrenci:** yalnızca öğretmenin paylaştığı dersi görür: ders notları, kendi odak grafiği ve eksik tamamlama
+  kartları, ders sonu mini quiz. Öğretmen yeni bir ders paylaşınca sayfa kendiliğinden güncellenir.
+- Onay `paylasim.json` dosyasında tutulur; öğrenci başka bir tarayıcı ya da cihazdan açsa da aynı dersi görür.
+- Öğretmen arayüzüne şifre koymak için `.env` içine `OGRETMEN_SIFRESI=...` yazın (boşsa şifre sorulmaz).
+- Öğrencilerin kendi cihazlarından bağlanabilmesi için `.streamlit/config.toml` içindeki `address = "localhost"`
+  satırını `address = "0.0.0.0"` yapın; öğrenciler `http://<öğretmen bilgisayarının IP adresi>:8501/?rol=ogrenci`
+  adresini açar. (Varsayılan ayar yalnızca bu bilgisayardan erişime izin verir.)
+
 ## 🎬 Dersi Başlat / Bitir (canlı kayıt)
 
-Öğretmen Görünümü'nün en üstündeki **"Ders kaydı"** kutusu:
+Öğretmen arayüzünün en üstündeki **"Ders kaydı"** kutusu:
 
-1. (İsteğe bağlı) **Ders konusu** yazın, ör. `Biyoloji: fotosentez, klorofil` — Whisper terimleri daha doğru yazar.
-2. **🔴 Dersi Başlat** → ayrı bir terminal penceresi ve bulanık kamera önizlemesi açılır.
-   Kamera ölçümü ile mikrofon **aynı anda** başlar (ikisi aynı 0. saniyeyi paylaşır).
-3. **⏹ Dersi Bitir** → kayıt durur ve otomatik olarak:
-   ses → metin (Whisper) → notlar + odak eşleştirmesi (Gemini) çalışır. Ham ses dosyası metne çevrilince silinir.
-4. Bitince sayfa kendiliğinden **"Gerçek ders"** moduna geçer ve yeni dersi gösterir.
+1. **Ders adı zorunludur** (ör. `Matematik 9-A: kesirler, pay, payda`). Boşsa kayıt başlamaz. Ad, notların başlığı
+   olur; içine yazılan konu ve terimler sesin metne daha doğru çevrilmesini sağlar.
+2. **🔴 Dersi Başlat**'a basınca iki soru sorulur (en az biri açık olmalı):
+   - **Ses dinlenip metne çevrilsin mi?** Kapalıysa mikrofon hiç açılmaz, not üretilmez.
+   - **Sınıfın odak ortalaması izlensin mi?** Kapalıysa kamera hiç açılmaz.
+3. **⏹ Dersi Bitir** → kayıt durur ve seçilenler otomatik işlenir. Ham ses dosyası metne çevrilince silinir.
+4. Bitince **Ders özeti** tablosu çıkar: ders adı, süre, **derse katılan öğrenci sayısı**, sınıf odak ortalaması,
+   odağın düştüğü bölümler ve ses bilgisi.
 
-Kurulum: `pip install -r requirements.txt` (mediapipe, opencv-python, faster-whisper, sounddevice eklendi).
-Elle çalıştırma: `python ders_kaydi.py --konu "Matematik: kesirler"` (kamera penceresinde `q` ile biter).
+**Öğrenci sayısı** kameranın ders boyunca aynı anda gördüğü yüz sayısından hesaplanır (kimlik tespiti yoktur, yalnızca
+sayılır). Kameraya yüzü dönük olmayan ya da kadraj dışında kalan öğrenciler sayılmaz. Büyük sınıflar için `.env`
+içinde `KAMERA_MAX_YUZ` değerini artırın (varsayılan 30).
 
-Yeni dosyalar: `ders_kaydi.py`, `ui/ders_kontrol.py`, `ses_hatti/transkript.py`, `ses_hatti/notlar.py`.
-`sensing/focus/classroom_focus.py` içine yalnızca üç kanca eklendi (başlangıç, durdurma, CSV yolu); ölçüm mantığı değişmedi.
-Kayıt sırasında sorun çıkarsa açılan terminal penceresindeki mesaja bakın; panel de hatayı gösterir.
+Elle çalıştırma: `python ders_kaydi.py --konu "Matematik: kesirler" [--ses-yok | --odak-yok]`
+(kamera penceresinde `q` ile biter; kamera kapalıysa paneldeki "Dersi Bitir" ile).
 
----
+## 🎙️ Öğretmen sesi ve metne çevirme
 
-## 🖊️ Tahta Defteri
+**Yalnızca öğretmenin sesi metne çevrilir** (`ses_hatti/konusmaci.py`):
 
-**"🖊️ Tahta"** sekmesinde dijital tahta defteri açılır (kalem, fosforlu kalem, silgi, şekiller, metin, iç defterler, geri sayım).
+- Kayıttaki her konuşma parçasından bir "ses izi" çıkarılır, benzer izler gruplanır; **ders boyunca toplam konuşma
+  süresi en uzun olan kişi öğretmen sayılır**. Öğretmene benzemeyen bölümler metne çevrilmeden **önce** susturulur.
+- Her şey bu bilgisayarda çalışır; ses izleri diske yazılmaz, kimlik eşleştirmesi yapılmaz.
+- Emin olunamayan yerlerde ses korunur (öğretmenin sözünü silmektense bir öğrenci cümlesinin kalması yeğlenir).
+  Öğretmenden hemen sonra söylenen çok kısa sözler ("evet", "tamam") bu yüzden metne geçebilir.
+- Sınırlar: öğretmen dersin çoğunda konuşmuyorsa (uzun tartışma, grup çalışması) baskın ses bulunamaz ve ayrım
+  yapılmaz; 8 saniyeden az konuşma olan kayıtlarda da yapılmaz. Sonuç ders özetindeki "Ses" satırında yazar.
+- Kapatmak için `.env` içine `OGRETMEN_SESI_AYRIMI=0` yazın.
+- Model: `ses_hatti/modeller/konusmaci.onnx` (WeSpeaker ResNet34, ~26 MB). Dosya yoksa ilk kullanımda indirilir.
 
-- **Tek tuş (varsayılan açık):** Tahtadaki **Dersi başlat** kamera + mikrofon kaydını da başlatır, **Dersi bitir** hepsini bitirir.
-  Tahtaya yazılan ders adı, Whisper'a konu ipucu olarak gider.
-- Her ders **boş bir tahtayla** başlar; ders bitince tahta `tahtalar/` klasörüne o dersin kaydı olarak eklenir (PNG + yazılma saatli JSON). Geçmiş derslerin tahtaları birikir ve listelenir.
-- Öğretmen Görünümü'nde tahta notların altında görünür; **Öğrenci Görünümü'nde** öğretmen notları onayladıktan sonra paylaşılır ve PNG olarak indirilebilir.
+**Metne çevirme iyileştirmeleri** (`ses_hatti/transkript.py`, `ses_hatti/notlar.py`):
 
-Dosyalar: `ui/tahta/index.html` (defterin kendisi; sonuna yalnızca arayüz köprüsü eklendi, tek başına açıldığında köprü devre dışı kalır), `ui/tahta_bileseni.py`.
+- Ders adındaki konu ve terimler Whisper'a kaydın **her bölümünde** ipucu olarak verilir (önceden yalnızca ilk 30 sn).
+- Kısık kayıtlar yükseltilir; kelime başı/sonu kesilmesin diye konuşma aralıkları biraz geniş tutulur.
+- Whisper'ın sessizlikte uydurduğu kalıplar ("Altyazı M.K.", "İzlediğiniz için teşekkürler" vb.) ve art arda
+  tekrarlar ayıklanır.
+- Notlardan önce transkript Gemini'ye **yalnızca yanlış duyulan kelimeleri düzeltmesi** için verilir
+  (ör. "bölük" → "bölü"). Satırı baştan yazan ya da içerik ekleyen düzeltmeler kabul edilmez; asıl metin
+  `transkript.json` içinde `ham` alanında saklanır. Kapatmak için `TRANSKRIPT_DUZELT=0`.
+- En büyük kazanç model seçimindedir: `.env` içinde `WHISPER_MODEL=medium` (yavaş, daha doğru) ya da
+  `large-v3-turbo` deneyebilirsiniz (hızını kendi bilgisayarınızda ölçün; bu projede denenmedi);
+  `small` hızlı ama daha çok hata yapar.
+
+Dosyalar: `ders_kaydi.py`, `ui/ders_kontrol.py`, `ses_hatti/transkript.py`, `ses_hatti/konusmaci.py`, `ses_hatti/notlar.py`.
+Kayıt sırasında sorun çıkarsa panel hatanın nedenini ve kayıt günlüğünün son satırlarını gösterir.
+
+> **Tahta sekmesi kaldırıldı.** `ui/tahta/` ve `ui/tahta_bileseni.py` dosyaları ile `tahtalar/` arşivi klasörde
+> duruyor ama arayüzde kullanılmıyor.
+
+## ▶️ Tek tıkla başlatma
+
+Windows'ta proje klasöründeki **`baslat.bat`** dosyasına çift tıklayın (macOS / Linux: `./baslat.sh`).
+İlk çalıştırmada sanal ortamı kurar ve paketleri yükler; sonraki açılışlarda doğrudan uygulamayı başlatır
+ve tarayıcıda `http://localhost:8501` adresini açar. Python 3.11 ya da 3.12 önerilir.
+
+## 🧰 Sorun giderme
+
+- **Kayıt hata verdi / pencere kapandı:** Öğretmen Görünümü'ndeki "Ders kaydı" kutusu hatanın asıl nedenini ve
+  **kayıt günlüğünün son satırlarını** gösterir. Günlüğün tamamı proje klasöründeki `kayit_gunlugu.txt` dosyasındadır.
+- **"Hiçbir model yanıt vermedi" (503 / yoğunluk):** Sistem her modeli kısa aralıklarla birkaç kez dener ve sırayla
+  yedek modellere geçer. Yine olmazsa ders kaydı ve metni kaybolmaz: "🔁 Notları yeniden üret" butonuna basın.
+  Belirli bir model için `.env` içine `LLM_MODEL=...` yazın.
+- **"Ders anlatımı algılanamadı":** Kayıt çok kısaysa ya da ses anlaşılmadıysa çıkar. Ham transkript sayfanın altındadır.
+  Mikrofonu `python mikrofon_testi.py` ile deneyin; Bluetooth kulaklık mikrofonları genelde kısık ve boğuk kaydeder,
+  mümkünse dizüstünün kendi mikrofonunu ya da kablolu bir mikrofonu seçin (`.env` içinde `MIKROFON=<numara>`).
+- **Ses metne çevirme çok yavaş:** `.env` içinde `WHISPER_MODEL=medium` işlemcide ders süresi kadar sürebilir;
+  demo için `small` çok daha hızlıdır.
+- **Paket hatası (cv2 / mediapipe / sounddevice bulunamadı):** `baslat.bat` ile açın ya da
+  `python -m pip install -r requirements.txt` çalıştırın.

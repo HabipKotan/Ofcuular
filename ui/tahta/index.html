@@ -897,15 +897,16 @@ function indir(blob, ad) {
   a.href = URL.createObjectURL(blob); a.download = ad; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
-function pngTuval() {
-  const boy = Math.max(200, icerikAlti() + 40), olcek = Math.min(2, 16000 / boy);
+function pngTuval(liste = ogeler) {
+  let alt = 0; for (const o of liste) alt = Math.max(alt, kutu(o)[3]);
+  const boy = Math.max(200, alt + 40), olcek = Math.min(2, 16000 / boy);
   const c = document.createElement('canvas');
   c.width = Math.round(gen * olcek); c.height = Math.round(boy * olcek);
   const x = c.getContext('2d');
   x.fillStyle = css('--kagit'); x.fillRect(0, 0, c.width, c.height);
   x.setTransform(olcek, 0, 0, olcek, 0, 0);
   kagitCiz(x, 0, boy, gen, kagit);
-  for (const o of ogeler) ogeCiz(x, o);
+  for (const o of liste) ogeCiz(x, o);
   return c;
 }
 $('#png').onclick = () => pngTuval().toBlob(b => indir(b, dosyaAdi('png')), 'image/png');
@@ -1076,7 +1077,7 @@ $('#geri').disabled = $('#ileri').disabled = true;
 new ResizeObserver(boyutla).observe(kaydir);
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { ciz(); onizle(); });
 boyutla();
-window.__defter = { get ogeler() { return ogeler; }, veri, png: () => pngTuval().toDataURL('image/png'),
+window.__defter = { get ogeler() { return ogeler; }, veri, png: () => pngTuval(veri().ogeler).toDataURL('image/png'),
   // yeni ders: bos sayfa (onceki ders arayuzde arsivlendi)
   yeniSayfa: () => { metniBitir(); yigin = []; ogeler = []; geriYigin = []; ileriYigin = []; belgeBoyu = 0;
                      baglamGuncelle(); degisti(); kaydir.scrollTop = 0; simdiCiz(); } };   // diger modullerin okuyabilmesi icin
