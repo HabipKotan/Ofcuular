@@ -1,6 +1,11 @@
 """
 Tahta defteri (arkadaşımızın ders_defteri.html'i) arayüzün içinde.
 
+ÖĞRETMEN PANELİNDE (ders_tahtasi): "Dersi Başlat" ile kayıt başlayınca tahta açılır, her ders BOŞ bir
+sayfayla başlar. Tahta yazıldıkça birkaç saniyede bir otomatik kaydedilir; ders bitince son hali yazılır ve
+tahta kaybolur. Kaydedilen sayfalar arayüzde gösterilmez; defter sayfaları gibi klasörde birikir:
+    <kalıcı klasör veya proje>/tahtalar/<tarih_saat>_<ders>.png / .json
+
 ui/tahta/index.html bir Streamlit bileşeni olarak açılır. Defterdeki
 "Dersi başlat" / "Dersi bitir" butonları arayüze olay gönderir:
     {"olay": "basladi", "zaman", "ders"}
@@ -16,12 +21,14 @@ from __future__ import annotations
 import base64
 import json
 import re
+import time
 from datetime import datetime
 from pathlib import Path
 
 import streamlit as st
 import streamlit.components.v1 as components
 
+from core.dosya import guvenli_yaz
 from ui import ders_kontrol, gercek_veri
 
 _bilesen = components.declare_component("tahta_defteri", path=str(Path(__file__).parent / "tahta"))
@@ -77,6 +84,66 @@ def olay_isle(olay, tek_tus: bool) -> None:
         if tek_tus and kayit_suruyor:
             ders_kontrol.DURDUR.touch()
             st.toast("⏹ Kayıt durduruluyor; notlar hazırlanacak.")
+
+
+# ---------------------------------------------------------------------------
+# Öğretmen paneli: ders boyunca açık, otomatik kaydedilen tahta
+# ---------------------------------------------------------------------------
+_ESLESME = ".eslesme.json"   # ders kimliği -> sayfa adı (aynı ders hep AYNI sayfanın üzerine yazılır)
+
+
+def _sayfa_koku(kimlik: str, ders: str) -> Path:
+    yol = gercek_veri.TAHTALAR / _ESLESME
+    try:
+        eslesme = json.loads(yol.read_text(encoding="utf-8"))
+    except Exception:
+        eslesme = {}
+    if kimlik not in eslesme:
+        eslesme[kimlik] = _dosya_adi(ders)
+        guvenli_yaz(yol, json.dumps(eslesme, ensure_ascii=False, indent=1))
+    return gercek_veri.TAHTALAR / eslesme[kimlik]
+
+
+def sayfa_kaydet(olay: dict) -> Path:
+    """Tahtanın son halini bu dersin sayfasına yazar (aynı ders içinde üzerine yazar)."""
+    png = olay.get("png") or ""
+    if not png.startswith("data:image/png;base64,"):
+        raise ValueError("tahta resmi gelmedi")
+    gercek_veri.TAHTALAR.mkdir(parents=True, exist_ok=True)
+    kok = _sayfa_koku(str(olay.get("kimlik")), olay.get("ders", ""))
+    resim = kok.with_name(kok.name + ".png")
+    guvenli_yaz(kok.with_name(kok.name + ".json"), json.dumps(olay.get("veri") or {}, ensure_ascii=False))
+    gecici = resim.with_name(resim.name + ".yaziliyor")
+    gecici.write_bytes(base64.b64decode(png.split(",", 1)[1]))
+    for _ in range(25):  # Windows: dosya o an açıksa kısa bekleyip tekrar dene
+        try:
+            gecici.replace(resim)
+            break
+        except PermissionError:
+            time.sleep(0.08)
+    return resim
+
+
+def ders_tahtasi(d: dict, yukseklik: int = 760) -> None:
+    """Kayıt sürerken tahtayı gösterir ve gelen otomatik kayıtları diske yazar."""
+    ss = st.session_state
+    kimlik = f"{d.get('pid') or 0}_{int(d.get('baslangic') or 0)}"
+    bitiyor = ders_kontrol.DURDUR.exists()
+    st.markdown("#### 🖊️ Tahta")
+    olay = _bilesen(yukseklik=yukseklik, kimlik=kimlik, konu=d.get("konu") or "", bitiyor=bitiyor,
+                    key="ders_tahtasi", default=None)
+    if (isinstance(olay, dict) and olay.get("olay") == "kaydet" and olay.get("kimlik") == kimlik
+            and ss.get("tahta_son_kayit") != olay.get("zaman")):
+        try:
+            sayfa_kaydet(olay)
+            ss.tahta_son_kayit = olay.get("zaman")
+            ss.tahta_son_kayit_saati = (kimlik, datetime.now().strftime("%H:%M:%S"))
+        except Exception as e:
+            st.warning(f"Tahta kaydedilemedi: {e}")
+    k, son = ss.get("tahta_son_kayit_saati") or (None, None)
+    son = son if k == kimlik else None
+    st.caption("Her ders boş bir tahtayla başlar ve yazdıkça otomatik kaydedilir"
+               + (f" · son kayıt {son}" if son else "") + ". Ders bitince tahta bu dersin sayfası olarak saklanır.")
 
 
 def render_tahta_sekmesi() -> None:

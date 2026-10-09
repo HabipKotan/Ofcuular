@@ -116,8 +116,12 @@ def _yeni_ders_geldi(d: dict) -> bool:
 
 
 def _asama(d: dict | None) -> str:
-    """Kutunun hangi halde çizileceği: 'aktif' (kayıt/işleme sürüyor ya da takılmış) | 'bos'."""
-    return "aktif" if (d or {}).get("durum") in AKTIF else "bos"
+    """Sayfanın hangi halde çizileceği. Her geçişte (başlatılıyor -> kayıt -> bitiriliyor -> işleniyor -> boş)
+    sayfa baştan çizilir: tahta kayıt başlayınca gelir, ders bitince kaybolur."""
+    durum = (d or {}).get("durum")
+    if durum not in AKTIF:
+        return "bos"
+    return durum + ("-bitiyor" if durum == "kayit" and DURDUR.exists() else "")
 
 
 # ---------------------------------------------------------------------------
@@ -191,7 +195,7 @@ def _canli_durum() -> None:
             c2.button("Durduruluyor…", disabled=True, width="stretch")
         elif c2.button("⏹ Dersi Bitir", type="primary", width="stretch"):
             DURDUR.touch()
-            st.rerun()
+            st.rerun(scope="app")  # tahta son halini hemen kaydetsin
         if ses:
             seviye = float(d.get("ses_seviyesi") or 0)
             st.progress(min(1.0, seviye * 8), text=f"🎙️ Mikrofon: {d.get('mikrofon') or '?'}")

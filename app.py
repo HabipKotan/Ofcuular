@@ -28,6 +28,7 @@ from ui import gercek_veri  # noqa: E402
 from ui import ogrenci_kayit  # noqa: E402
 from core import ogrenci_db  # noqa: E402
 from ui import pipeline as pl  # noqa: E402
+from ui import tahta_bileseni  # noqa: E402
 
 ui.inject_css()
 ss = st.session_state
@@ -156,6 +157,11 @@ def ogretmen_arayuzu() -> None:
     baslik(f"{lecture.subject} · {lecture.grade_level or ''} · {lecture.title}", "ogretmen")
     ui.render_privacy_strip()
     ders_kontrol.render_ders_kaydi()
+    d = ders_kontrol.durum_oku() or {}
+    if d.get("durum") == "kayit" and d.get("baslangic"):
+        # Ders sürüyor: sayfa = kayıt kutusu + tahta (tahta otomatik kaydedilir, arşiv arayüzde gösterilmez)
+        tahta_bileseni.ders_tahtasi(d)
+        return
     ogrenci_kayit.render_ogrenci_kayit()
 
     bilgi = gercek_veri.ders_bilgisi() if gercek else {}
