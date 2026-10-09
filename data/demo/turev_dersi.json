@@ -1,0 +1,44 @@
+{
+  "lecture_id": "demo-turev-001",
+  "title": "Türeve Giriş: Tanım ve Temel Kurallar",
+  "subject": "Matematik",
+  "grade_level": "11. Sınıf",
+  "segments": [
+    {
+      "start_time": 0,
+      "end_time": 120,
+      "topic": "Giriş ve Limit Hatırlatması",
+      "transcript": "Evet arkadaşlar günaydın, herkes yerine geçsin. Bugün türeve giriş yapıyoruz ama önce geçen hafta gördüğümüz limiti bir hatırlayalım. Limit neydi, x bir değere yaklaşırken fonksiyonun yaklaştığı değer. Mesela x ikiye giderken x kare artı bir, beşe gidiyor. Bunu tahtaya yazıyorum. Şimdi bugün göreceğimiz her şey aslında bu limit fikrinin üstüne kurulu, o yüzden burayı unutmayın."
+    },
+    {
+      "start_time": 120,
+      "end_time": 270,
+      "topic": "Ortalama Değişim Hızı ve Teğet Eğimi",
+      "transcript": "Şimdi bir arabanın konumunu düşünün. İki saniye ile dört saniye arasında ne kadar yol aldığını o süreye bölersek ortalama hızı buluruz. Grafikte bu iki noktayı birleştiren doğruya kesen diyoruz ve bu kesenin eğimi ortalama değişim hızı. Formül olarak f(b) eksi f(a) bölü b eksi a. Peki ikinci noktayı birinci noktaya giderek yaklaştırırsak ne olur? Kesen doğru dönmeye başlar ve en sonunda eğriye sadece bir noktada dokunan teğet doğruya dönüşür. İşte o anlık eğim bizim türevimiz olacak."
+    },
+    {
+      "start_time": 270,
+      "end_time": 420,
+      "topic": "Türevin Limit Tanımı",
+      "transcript": "Şimdi bunu formüle dökelim, burası çok önemli, sınavda mutlaka çıkıyor. f üssü x eşittir limit h sıfıra giderken, f(x artı h) eksi f(x) bölü h. Buradaki h aslında iki nokta arasındaki mesafe, onu sıfıra yaklaştırıyoruz. Hemen bir örnek yapalım: f(x) eşittir x kare. f(x artı h) olur x kare artı iki x h artı h kare. Eksi x kare yapınca iki x h artı h kare kalıyor, h'ye bölünce iki x artı h, h sıfıra gidince sonuç iki x. Yani x karenin türevi iki x. Bunu tahtada kutu içine alıyorum."
+    },
+    {
+      "start_time": 420,
+      "end_time": 570,
+      "topic": "Kuvvet Kuralı",
+      "transcript": "Her seferinde limit hesaplamak çok uzun sürer, o yüzden kısa yollar var. İlki kuvvet kuralı. x üzeri n'nin türevi n çarpı x üzeri n eksi bir. Yani üs başa iner, üsten bir eksilir. Az önce limitle bulduğumuz x kare örneğinde de n iki, türev iki x, aynı sonuç, kontrol etmiş olduk. x küp olursa üç x kare. Sabit sayının türevi sıfır çünkü sabit bir şey değişmez, eğimi sıfır. Bir de sabit çarpan dışarı çıkar: beş x küpün türevi on beş x kare."
+    },
+    {
+      "start_time": 570,
+      "end_time": 720,
+      "topic": "Toplam ve Çarpım Kuralı",
+      "transcript": "Toplamın türevi türevlerin toplamı, burası kolay. Ama çarpımda dikkat, çarpımın türevi türevlerin çarpımı değil, en çok yapılan hata bu. Kural şöyle: birincinin türevi çarpı ikinci, artı birinci çarpı ikincinin türevi. Örnek, x kare çarpı x artı bir. Birincinin türevi iki x, çarpı x artı bir; artı x kare çarpı bir. Topladığımızda iki x kare artı iki x artı x kare, yani üç x kare artı iki x. İsterseniz önce çarpıp sonra kuvvet kuralıyla kontrol edin, aynı çıkacak."
+    },
+    {
+      "start_time": 720,
+      "end_time": 900,
+      "topic": "Tahta Çözümü ve Kapanış",
+      "transcript": "Son olarak tahtaya bir soru yazıyorum, birlikte çözelim. f(x) eşittir üç x üzeri dört eksi iki x kare artı yedi x eksi beş. f üssü bir kaç? Önce türevi alıyoruz: on iki x küp eksi dört x artı yedi, sabitin türevi sıfır. Şimdi x yerine bir koyuyoruz: on iki eksi dört artı yedi, on beş. Yani bu fonksiyonun x eşittir bir noktasındaki teğetinin eğimi on beş. Ödev olarak kitaptaki ilk on soruyu çözüyorsunuz. Haftaya bölüm kuralı ve zincir kuralına geçeceğiz. İyi dersler."
+    }
+  ]
+}

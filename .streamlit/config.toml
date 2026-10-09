@@ -1,0 +1,10 @@
+[theme]
+primaryColor = "#2F6FDE"
+base = "light"
+
+[browser]
+gatherUsageStats = false
+
+[server]
+# Yalnızca bu makineden erişim: öğrenci verisi cihazdan çıkmaz
+address = "localhost"

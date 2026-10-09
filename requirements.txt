@@ -1,0 +1,16 @@
+# Çekirdek
+pydantic>=2.6
+numpy>=1.26
+python-dotenv>=1.0
+
+# Arayüz
+streamlit>=1.40  # segmented_control + plotly on_select
+plotly>=5.20
+
+# LLM
+anthropic>=0.40
+
+# Uçta algılama (adım 6'da kullanılacak)
+# mediapipe>=0.10
+# opencv-python>=4.9
+# faster-whisper>=1.0
