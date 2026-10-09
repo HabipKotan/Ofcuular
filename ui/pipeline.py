@@ -71,7 +71,7 @@ def student_data_present() -> bool:
 
 
 def run_student_pipeline(lecture: Lecture, threshold: float, force: bool = False,
-                         kaynak: str = KAYNAK_DEMO) -> None:
+                         kaynak: str = KAYNAK_DEMO, ogrenci_id: int | None = None) -> None:
     """Odak verisini üretir, eşleştirir ve kartları oluşturur. Sonuçlar session_state'e yazılır.
 
     Eşik değiştiğinde yalnızca korelasyon ve (gerekirse) kartlar yeniden hesaplanır;
@@ -80,22 +80,46 @@ def run_student_pipeline(lecture: Lecture, threshold: float, force: bool = False
     """
     ss = st.session_state
 
-    if ss.get("focus_lecture_id") != lecture.lecture_id:
+    if ss.get("focus_lecture_id") != lecture.lecture_id or ss.get("focus_ogrenci") != ogrenci_id:
         force = True
 
     if force or "focus_raw" not in ss:
-        if kaynak == KAYNAK_GERCEK:
+        ss.focus_kisisel = False
+        ss.focus_durum = "sinif"   # sinif: sınıf ortalaması | kisisel: kendi ölçümü | yok: derste görülmedi (0)
+        kisisel, derste_yok = [], False
+        if kaynak == KAYNAK_GERCEK and ogrenci_id is not None:
+            # Rızalı kayıtlı öğrenci: sınıf kamerasının YALNIZCA ona ait ölçümleri
+            from core import ogrenci_db
+            kayit = gercek_veri.odak_kaydi()
+            kisisel = [FocusSample(timestamp=round(t, 2), focus_score=round(min(100.0, max(0.0, sk)), 1))
+                       for t, sk in ogrenci_db.kisisel_odak(kayit, ogrenci_id)]
+            # Kamerada arandı ama hiç görülmedi: derste yok -> odak 0 (notları yine alır)
+            derste_yok = not kisisel and ogrenci_db.beklenen_mi(kayit, ogrenci_id)
+        if kisisel:
+            ss.focus_raw, ss.focus_kisisel, ss.focus_durum = kisisel, True, "kisisel"
+        elif derste_yok:
+            ss.focus_raw, ss.focus_durum = [], "yok"
+        elif kaynak == KAYNAK_GERCEK:
             ss.focus_raw = gercek_veri.gercek_odak()
         else:
             ss.focus_raw = SimulatedFocusSource(
                 duration=lecture.duration, sample_rate_hz=settings.focus.sample_rate_hz
             ).collect()
         ss.focus_lecture_id = lecture.lecture_id
+        ss.focus_ogrenci = ogrenci_id
+        for k in [k for k in ss.keys() if str(k).startswith("quiz_") and not str(k).startswith("quiz_genel_")]:
+            del ss[k]  # önceki dersin kart cevapları
+        ss.pop("card_choice", None)
+        ss.pop("clicked_segment", None)
         ss.card_cache = {}
         ss.llm_chars_sent = 0
         ss.pop("threshold_used", None)
 
     if ss.get("threshold_used") == threshold and "gaps" in ss:
+        return
+    if ss.get("focus_durum") == "yok":  # derste değildi: kart üretilmez (yapay zekâ kotası da harcanmaz)
+        ss.focus_smooth, ss.gaps, ss.gap_parts, ss.cards = [], [], [], []
+        ss.threshold_used = threshold
         return
 
     cfg = dataclasses.replace(settings.focus, threshold=threshold)
@@ -119,6 +143,26 @@ def run_student_pipeline(lecture: Lecture, threshold: float, force: bool = False
     # Eski seçim artık geçersizse sıfırla
     if ss.get("card_choice") is not None and ss.card_choice >= len(cards):
         ss.card_choice = 0 if cards else None
+
+
+def sinif_odagi(lecture: Lecture, threshold: float, kaynak: str = KAYNAK_DEMO) -> dict | None:
+    """Öğretmen paneli için sınıf odağı: ham + yumuşatılmış seri ve eşik altı aralıklar (LLM çağrısı yok).
+    Odak verisi yoksa None."""
+    ss = st.session_state
+    anahtar = (lecture.lecture_id, kaynak)
+    if ss.get("sinif_odak_anahtar") != anahtar:
+        if kaynak == KAYNAK_GERCEK:
+            ham = gercek_veri.gercek_odak()
+        else:
+            ham = SimulatedFocusSource(duration=lecture.duration,
+                                       sample_rate_hz=settings.focus.sample_rate_hz).collect()
+        ss.sinif_odak_ham, ss.sinif_odak_anahtar = ham, anahtar
+    ham = ss.sinif_odak_ham
+    if not ham:
+        return None
+    matcher = TimeSeriesMatcher(config=dataclasses.replace(settings.focus, threshold=threshold))
+    gaps, parts = group_gaps_by_segment(matcher.match_with_lecture(ham, lecture))
+    return {"raw": ham, "smooth": matcher.smooth_focus_samples(ham), "gaps": gaps, "parts": parts}
 
 
 def group_gaps_by_segment(gaps: List[GapWindow]) -> Tuple[List[GapWindow], List[Tuple[GapWindow, int]]]:
@@ -153,7 +197,8 @@ def wipe_student_data() -> None:
     """'Verilerimi sil': öğrenciye ait her şeyi oturum belleğinden kaldırır."""
     for k in list(st.session_state.keys()):
         if k in STUDENT_KEYS or k in ("card_cache", "threshold_used", "card_choice", "chart_sel_seen",
-                                      "focus_lecture_id") or str(k).startswith("quiz_"):
+                                      "focus_lecture_id", "focus_ogrenci", "focus_kisisel", "focus_durum") \
+                or str(k).startswith("quiz_"):
             del st.session_state[k]
 
 

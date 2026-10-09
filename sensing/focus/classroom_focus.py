@@ -60,6 +60,23 @@ MODEL_DOSYA = Path(__file__).with_name("face_landmarker.task")
 
 NEDEN_ADLARI = {"yana": "yana bakma", "egik": "bas egik", "kapali": "goz kapali / yorgunluk"}
 
+# Ders kaydi entegrasyonu (ders_kaydi.py tarafindan doldurulur; tek basina calisirken None kalir)
+#   BASLANGIC_KANCASI(monotonic_saat): olcum saati sifirlandigi an cagrilir -> mikrofon ayni anda baslar
+#   DURDUR_DOSYASI: bu dosya olusunca dongu 'q'ya basilmis gibi duzgunce biter
+#   CSV_KANCASI(csv_yolu): olcum dosyasinin yolu belli olunca cagrilir
+BASLANGIC_KANCASI = None
+DURDUR_DOSYASI: Path | None = None
+CSV_KANCASI = None
+#   KISI_KANCASI: rizali kisisel odak (sensing/focus/yuz_kimligi.KisiselTakip). Yalnizca KAYITLI ogrencileri
+#   tanir; digerlerinin yuz izi aninda atilir. None ise hicbir yuz tanima yapilmaz.
+KISI_KANCASI = None
+
+
+def _piksel_kutu(lm, w, h):
+    xs = [p.x for p in lm]
+    ys = [p.y for p in lm]
+    return [min(xs) * w, min(ys) * h, max(xs) * w, max(ys) * h]
+
 
 # --------------------------------------------------------------------------
 # Tek yuz: aci ve skor hesabi (saf fonksiyonlar)
@@ -361,6 +378,15 @@ def saatlik_ozet(kayitlar: list[tuple[datetime, float]]) -> list[tuple[str, floa
     return [(etiket, round(sum(v) / len(v), 1)) for etiket, v in gruplar.items()]
 
 
+def ogrenci_sayisi(yuz_ortalamalari: list) -> int:
+    """Derste kameranin gordugu kisi sayisi: donemlerdeki ortalama yuz sayisinin ust ucu (%95'lik deger).
+    Tek tuk yanlis algilama sayiyi sisirmez; ogrenciler ara sira donse/egilse de sayi dusmez."""
+    d = sorted(v for v in yuz_ortalamalari if v and v > 0)
+    if not d:
+        return 0
+    return max(1, int(round(d[min(len(d) - 1, math.ceil(0.95 * len(d)) - 1)])))
+
+
 def oturum_ozeti(oturum: Oturum, ders: str) -> dict:
     """Panelin / ses modulunun okuyacagi sayisal ozet."""
     iyi = [k for k in oturum.kayitlar if k.guvenilir]
@@ -385,6 +411,7 @@ def oturum_ozeti(oturum: Oturum, ders: str) -> dict:
         baslangic=oturum.kayitlar[0].baslangic.isoformat(timespec="seconds"),
         bitis=oturum.kayitlar[-1].bitis.isoformat(timespec="seconds"),
         genel_ortalama=round(sum(k.skor for k in iyi) / len(iyi), 1),
+        ogrenci_sayisi=ogrenci_sayisi([k.ortalama_yuz for k in iyi]),
         saate_gore=[{"saat": s, "skor": v} for s, v in satirlar],
         en_dusuk=dict(zip(("saat", "skor"), min(satirlar, key=lambda x: x[1]))),
         en_yuksek=dict(zip(("saat", "skor"), max(satirlar, key=lambda x: x[1]))),
@@ -410,6 +437,7 @@ def ozet_yazdir(ozet: dict) -> None:
     print(f" En dusuk          : {ozet['en_dusuk']['saat']}  ({ozet['en_dusuk']['skor']})")
     print(f" En yuksek         : {ozet['en_yuksek']['saat']}  ({ozet['en_yuksek']['skor']})")
     n = ozet["neden_oranlari"]
+    print(f" Ogrenci sayisi    : {ozet.get('ogrenci_sayisi', 0)}  (kameranin gordugu kisi)")
     print(f" Ortalama oranlar  : yana bakan %{n['yana'] * 100:.0f} | basi egik %{n['egik'] * 100:.0f}"
           f" | gozu kapali %{n['kapali'] * 100:.0f}")
     e = ozet["esneme"]
@@ -560,10 +588,14 @@ def calistir(args: argparse.Namespace) -> None:
     yazici.writerow(CSV_BASLIK)
     olay_yazici.writerow(OLAY_BASLIK)
     olay_dosya.flush()
+    if CSV_KANCASI:
+        CSV_KANCASI(csv_yol)
 
     toplayici = DonemToplayici(esikler)
     oturum = Oturum(args.aralik, args.olay_esik, args.olay_sure, args.yumusatma)
     baslangic = time.monotonic()
+    if BASLANGIC_KANCASI:
+        BASLANGIC_KANCASI(baslangic)
     donem_basi, donem_basi_zaman = baslangic, datetime.now()
     yaw0 = pitch0 = 0.0
     kalib_ornek: list[tuple[float, float]] = []
@@ -618,6 +650,8 @@ def calistir(args: argparse.Namespace) -> None:
     try:
         with vision.FaceLandmarker.create_from_options(secenekler) as dedektor:
             while True:
+                if DURDUR_DOSYASI is not None and DURDUR_DOSYASI.exists():
+                    break
                 tamam, kare = kamera.read()
                 if not tamam:
                     print("Kameradan kare alinamadi, cikiliyor.")
@@ -655,10 +689,27 @@ def calistir(args: argparse.Namespace) -> None:
                     if simdi - donem_basi >= args.aralik:
                         donem_yaz(simdi)
 
+                # Rizali kisisel odak: bulaniklastirmadan ONCE, ham karede (kare diske yazilmaz)
+                etiketler = {}
+                if KISI_KANCASI is not None and yuzler:
+                    hh, ww = kare.shape[:2]
+                    try:
+                        etiketler = KISI_KANCASI.kare_isle(kare, [_piksel_kutu(h[4], ww, hh) for h in ham],
+                                                           [y.skor for y in yuzler], simdi - baslangic)
+                    except Exception as e:  # tanima hatasi sinif olcumunu durdurmasin
+                        print(f"Kisisel takip hatasi: {e}")
+
                 if not args.onizleme_yok:
                     onizleme_ciz(cv2, kare, [h[4] for h in ham], yuzler, son, esikler,
                                  bulanik=not args.yuz_goster, kalibrasyon=not kalibrasyon_bitti,
                                  uyari_sn=oturum.uyari_suresi)
+                    hh, ww = kare.shape[:2]
+                    for i, ad in etiketler.items():   # yalnizca kayitli (rizali) ogrencinin adi yazilir
+                        x1, y1, x2, _ = _piksel_kutu(ham[i][4], ww, hh)
+                        cv2.putText(kare, ad, (int(x1), max(15, int(y1) - 26)), cv2.FONT_HERSHEY_SIMPLEX,
+                                    0.6, (255, 255, 255), 4)
+                        cv2.putText(kare, ad, (int(x1), max(15, int(y1) - 26)), cv2.FONT_HERSHEY_SIMPLEX,
+                                    0.6, (200, 90, 20), 2)
                     cv2.imshow("Sinif Dikkat Olcer (q: cikis)", kare)
                     if cv2.waitKey(1) & 0xFF == ord("q"):
                         break
@@ -668,6 +719,11 @@ def calistir(args: argparse.Namespace) -> None:
     finally:
         kamera.release()
         an = time.monotonic()
+        if KISI_KANCASI is not None:
+            try:
+                KISI_KANCASI.bitir(an - baslangic)
+            except Exception as e:
+                print(f"Kisisel takip kapatilamadi: {e}")
         if kalibrasyon_bitti and an - donem_basi >= args.aralik / 2:
             donem_yaz(an)  # yarim kalan son donemi de kaydet (cok kisaysa atla)
         olay_yaz(oturum.bitir())         # hala suren dusus varsa kapat

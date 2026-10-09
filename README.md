@@ -103,7 +103,7 @@ Tarayıcınızda `http://localhost:8501` adresine giderek demoyu inceleyebilirsi
 ## 🎙️ Gerçek Ders Modu (ses + görüntü + Gemini entegrasyonu)
 
 Arayüz artık hazır demo verisinin yanında **gerçek bir dersin** çıktılarını da gösterebilir.
-Kenar çubuğundaki **"Veri kaynağı"** seçiminden **"Gerçek ders (son kayıt)"** seçilir; demo modu yedek olarak durur.
+Öğretmen arayüzünün kenar çubuğundaki **"Gösterilen ders"** seçiminden **"Son ders kaydı"** seçilir; demo modu yedek olarak durur.
 
 ### 1. Gemini anahtarı
 `.env.example` dosyasını `.env` adıyla kopyalayın ve anahtarı yazın:
@@ -135,3 +135,132 @@ Yeni bir ders işlendiğinde kenar çubuğundaki **"🔄 Son kaydı yeniden yük
 - `app.py`: veri kaynağı seçimi, yeniden yükleme, öğretmene öneri kutusu
 - `llm/client.py`, `core/config.py`: Gemini desteği (model yoksa yedek modele geçer)
 - `llm/prompts.py`: üçlü tırnak yazım hatası düzeltildi (canlı LLM modunda uygulamayı çökertiyordu)
+
+---
+
+## 👥 İki ayrı arayüz: öğretmen ve öğrenci
+
+Uygulama açılınca rol sorulur; her rol yalnızca kendi ekranını görür (adres çubuğunda `?rol=ogretmen` / `?rol=ogrenci`).
+
+- **Öğretmen:** dersi başlatır/bitirir, ders sonu özetini (öğrenci sayısı, sınıf odağı, ses bilgisi) görür,
+  notları düzenler ve **"Onayla ve öğrencilerle paylaş"** der.
+- **Öğrenci:** yalnızca öğretmenin paylaştığı dersi görür: ders notları, kendi odak grafiği ve eksik tamamlama
+  kartları, ders sonu mini quiz. Öğretmen yeni bir ders paylaşınca sayfa kendiliğinden güncellenir.
+- Onay `paylasim.json` dosyasında tutulur; öğrenci başka bir tarayıcı ya da cihazdan açsa da aynı dersi görür.
+- Öğretmen arayüzüne şifre koymak için `.env` içine `OGRETMEN_SIFRESI=...` yazın (boşsa şifre sorulmaz).
+- Öğrencilerin kendi cihazlarından bağlanabilmesi için `.streamlit/config.toml` içindeki `address = "localhost"`
+  satırını `address = "0.0.0.0"` yapın; öğrenciler `http://<öğretmen bilgisayarının IP adresi>:8501/?rol=ogrenci`
+  adresini açar. (Varsayılan ayar yalnızca bu bilgisayardan erişime izin verir.)
+
+## 🎬 Dersi Başlat / Bitir (canlı kayıt)
+
+Öğretmen arayüzünün en üstündeki **"Ders kaydı"** kutusu:
+
+1. **Ders adı zorunludur** (ör. `Matematik 9-A: kesirler, pay, payda`). Boşsa kayıt başlamaz. Ad, notların başlığı
+   olur; içine yazılan konu ve terimler sesin metne daha doğru çevrilmesini sağlar.
+2. **🔴 Dersi Başlat**'a basınca iki soru sorulur (en az biri açık olmalı):
+   - **Ses dinlenip metne çevrilsin mi?** Kapalıysa mikrofon hiç açılmaz, not üretilmez.
+   - **Sınıfın odak ortalaması izlensin mi?** Kapalıysa kamera hiç açılmaz.
+3. **⏹ Dersi Bitir** → kayıt durur ve seçilenler otomatik işlenir. Ham ses dosyası metne çevrilince silinir.
+4. Bitince **Ders özeti** tablosu çıkar: ders adı, süre, **derse katılan öğrenci sayısı**, sınıf odak ortalaması,
+   odağın düştüğü bölümler ve ses bilgisi.
+
+**Öğrenci sayısı** kameranın ders boyunca aynı anda gördüğü yüz sayısından hesaplanır (kimlik tespiti yoktur, yalnızca
+sayılır). Kameraya yüzü dönük olmayan ya da kadraj dışında kalan öğrenciler sayılmaz. Büyük sınıflar için `.env`
+içinde `KAMERA_MAX_YUZ` değerini artırın (varsayılan 30).
+
+Elle çalıştırma: `python ders_kaydi.py --konu "Matematik: kesirler" [--ses-yok | --odak-yok]`
+(kamera penceresinde `q` ile biter; kamera kapalıysa paneldeki "Dersi Bitir" ile).
+
+## 🎙️ Öğretmen sesi ve metne çevirme
+
+**Yalnızca öğretmenin sesi metne çevrilir** (`ses_hatti/konusmaci.py`):
+
+- Kayıttaki her konuşma parçasından bir "ses izi" çıkarılır, benzer izler gruplanır; **ders boyunca toplam konuşma
+  süresi en uzun olan kişi öğretmen sayılır**. Öğretmene benzemeyen bölümler metne çevrilmeden **önce** susturulur.
+- Her şey bu bilgisayarda çalışır; ses izleri diske yazılmaz, kimlik eşleştirmesi yapılmaz.
+- Emin olunamayan yerlerde ses korunur (öğretmenin sözünü silmektense bir öğrenci cümlesinin kalması yeğlenir).
+  Öğretmenden hemen sonra söylenen çok kısa sözler ("evet", "tamam") bu yüzden metne geçebilir.
+- Sınırlar: öğretmen dersin çoğunda konuşmuyorsa (uzun tartışma, grup çalışması) baskın ses bulunamaz ve ayrım
+  yapılmaz; 8 saniyeden az konuşma olan kayıtlarda da yapılmaz. Sonuç ders özetindeki "Ses" satırında yazar.
+- Kapatmak için `.env` içine `OGRETMEN_SESI_AYRIMI=0` yazın.
+- Model: `ses_hatti/modeller/konusmaci.onnx` (WeSpeaker ResNet34, ~26 MB). Dosya yoksa ilk kullanımda indirilir.
+
+**Metne çevirme iyileştirmeleri** (`ses_hatti/transkript.py`, `ses_hatti/notlar.py`):
+
+- Ders adındaki konu ve terimler Whisper'a kaydın **her bölümünde** ipucu olarak verilir (önceden yalnızca ilk 30 sn).
+- Kısık kayıtlar yükseltilir; kelime başı/sonu kesilmesin diye konuşma aralıkları biraz geniş tutulur.
+- Whisper'ın sessizlikte uydurduğu kalıplar ("Altyazı M.K.", "İzlediğiniz için teşekkürler" vb.) ve art arda
+  tekrarlar ayıklanır.
+- Notlardan önce transkript Gemini'ye **yalnızca yanlış duyulan kelimeleri düzeltmesi** için verilir
+  (ör. "bölük" → "bölü"). Satırı baştan yazan ya da içerik ekleyen düzeltmeler kabul edilmez; asıl metin
+  `transkript.json` içinde `ham` alanında saklanır. Kapatmak için `TRANSKRIPT_DUZELT=0`.
+- En büyük kazanç model seçimindedir: `.env` içinde `WHISPER_MODEL=medium` (yavaş, daha doğru) ya da
+  `large-v3-turbo` deneyebilirsiniz (hızını kendi bilgisayarınızda ölçün; bu projede denenmedi);
+  `small` hızlı ama daha çok hata yapar.
+
+Dosyalar: `ders_kaydi.py`, `ui/ders_kontrol.py`, `ses_hatti/transkript.py`, `ses_hatti/konusmaci.py`, `ses_hatti/notlar.py`.
+Kayıt sırasında sorun çıkarsa panel hatanın nedenini ve kayıt günlüğünün son satırlarını gösterir.
+
+> **Tahta sekmesi kaldırıldı.** `ui/tahta/` ve `ui/tahta_bileseni.py` dosyaları ile `tahtalar/` arşivi klasörde
+> duruyor ama arayüzde kullanılmıyor.
+
+## ▶️ Tek tıkla başlatma
+
+Windows'ta proje klasöründeki **`baslat.bat`** dosyasına çift tıklayın (macOS / Linux: `./baslat.sh`).
+İlk çalıştırmada sanal ortamı kurar ve paketleri yükler; sonraki açılışlarda doğrudan uygulamayı başlatır
+ve tarayıcıda `http://localhost:8501` adresini açar. Python 3.11 ya da 3.12 önerilir.
+
+## 🧰 Sorun giderme
+
+- **Kayıt hata verdi / pencere kapandı:** Öğretmen Görünümü'ndeki "Ders kaydı" kutusu hatanın asıl nedenini ve
+  **kayıt günlüğünün son satırlarını** gösterir. Günlüğün tamamı proje klasöründeki `kayit_gunlugu.txt` dosyasındadır.
+- **"Hiçbir model yanıt vermedi" (503 / yoğunluk):** Sistem her modeli kısa aralıklarla birkaç kez dener ve sırayla
+  yedek modellere geçer. Yine olmazsa ders kaydı ve metni kaybolmaz: "🔁 Notları yeniden üret" butonuna basın.
+  Belirli bir model için `.env` içine `LLM_MODEL=...` yazın.
+- **"Ders anlatımı algılanamadı":** Kayıt çok kısaysa ya da ses anlaşılmadıysa çıkar. Ham transkript sayfanın altındadır.
+  Mikrofonu `python mikrofon_testi.py` ile deneyin; Bluetooth kulaklık mikrofonları genelde kısık ve boğuk kaydeder,
+  mümkünse dizüstünün kendi mikrofonunu ya da kablolu bir mikrofonu seçin (`.env` içinde `MIKROFON=<numara>`).
+- **Ses metne çevirme çok yavaş:** `.env` içinde `WHISPER_MODEL=medium` işlemcide ders süresi kadar sürebilir;
+  demo için `small` çok daha hızlıdır.
+- **Paket hatası (cv2 / mediapipe / sounddevice bulunamadı):** `baslat.bat` ile açın ya da
+  `python -m pip install -r requirements.txt` çalıştırın.
+
+---
+
+## 🙋 Rızalı kişisel odak raporu (yüz tanıma yalnızca kayıtlı öğrenciye)
+
+**Model:** Sınıftaki herkes anonim sınıf ortalamasına katılır. Yalnızca **açık rıza veren ve öğretmenin kaydettiği**
+öğrenci kamerada tanınır; onun odağı ayrıca kendi adına ölçülür ve raporunu **yalnızca kendisi** görür.
+
+1. **Kayıt (öğretmen):** Öğretmen arayüzü → **"👥 Rızalı öğrenci kaydı"** → ad + rıza onayı + kameradan 3-4 yüz örneği
+   → **"Kaydı tamamla ve şifre üret"**. Her öğrenciye **farklı** bir şifre üretilir (ör. `7KQ-M3P`); öğrenciye verilir.
+   Şifre yalnızca bir kez gösterilir; unutulursa listeden **"🔑 Yeni şifre"**.
+2. **Ders:** Kamera herkesin odağını ölçer (sınıf ortalaması). Saniyede bir karedeki yüzlerin "yüz izi" kayıtlı izlerle
+   karşılaştırılır: eşleşen öğrencinin skoru ayrıca kaydedilir (önizlemede adı yazar); eşleşmeyenlerin izi **anında atılır**.
+3. **Öğrenci:** `?rol=ogrenci` → kendi şifresiyle girer → **kendi** odak grafiği ve **kendi** kopma anlarına göre kartlar.
+   Kamera onu tanımadıysa sınıf ortalaması gösterilir. Yan panelden yüz izini ve tüm kişisel verisini kalıcı olarak silebilir.
+
+**Gizlilik:** Fotoğraf saklanmaz; yalnızca geri döndürülemez yüz izi (128 sayı) `ogrenciler.db` (SQLite) içinde tutulur.
+Şifrelerin kendisi değil, gizli anahtarlı özeti saklanır. Yanlış eşleşmeye karşı sıkı benzerlik eşiği (0,42) ve
+art arda tutarlı tanıma şartı vardır; bir öğrenci aynı anda yalnızca tek bir yüze atanabilir.
+
+**Dosyalar:** `core/ogrenci_db.py`, `sensing/focus/yuz_kimligi.py`, `ui/ogrenci_kayit.py`,
+modeller `sensing/focus/modeller/yuz_tespit_yunet.onnx` + `yuz_izi_sface.onnx` (OpenCV; ek kurulum gerekmez).
+
+---
+
+## 🔑 Gemini kotası (ücretsiz katman)
+
+Ücretsiz katmanda kota **anahtar (proje) ve model başınadır** (ör. günde 20 istek). `llm/gemini_havuzu.py` bir model/anahtar
+dolunca otomatik olarak sıradakine geçer: `gemini-3.5-flash → 3.5-flash-lite → 3.1-flash-lite → 2.5-flash → 2.5-flash-lite`,
+her biri için `.env`'deki bütün anahtarlar (`GEMINI_API_KEY`, `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3`). Başka Google
+hesaplarından alınan anahtarları eklemek kotayı katlar.
+
+### Öğrenci girişi, katılım ve kalıcı kayıtlar
+- **Kayıtlı öğrenci:** şifreyle girer → **kendi** odak raporu. Derste kamerada hiç görülmediyse odak puanı **0** gösterilir;
+  ders notları ve mini quiz yine açıktır. Öğretmen yalnızca "N kayıtlı öğrenciden M'si derste tanındı" özetini görür.
+- **Kayıtsız öğrenci:** şifresiz "Kayıtsız öğrenci olarak devam et" → notlar + sınıf ortalamasına göre kartlar + quiz.
+- **Kayıtlar kalıcıdır:** öğrenci veritabanı ve yüz modeli proje klasöründe değil, `<kullanıcı klasörü>\DersAsistani\`
+  içinde tutulur. Yeni bir sürümü başka klasöre kursanız da öğrencileri yeniden kaydetmeniz gerekmez (eski klasördeki
+  `ogrenciler.db` ilk açılışta otomatik taşınır). Klasörü değiştirmek için `.env`: `DERS_ASISTANI_VERI=...`

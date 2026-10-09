@@ -35,6 +35,8 @@ from pathlib import Path
 PROJE = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJE))
 
+from core.dosya import guvenli_yaz  # noqa: E402
+
 try:
     from dotenv import load_dotenv
 
@@ -100,9 +102,10 @@ def durum_yaz(**alanlar) -> None:
     with _durum_kilidi:
         _durum.update(alanlar)
         _durum["guncelleme"] = time.time()
-        gecici = DURUM.with_suffix(".tmp")
-        gecici.write_text(json.dumps(_durum, ensure_ascii=False), encoding="utf-8")
-        os.replace(gecici, DURUM)  # yarım okunmasın diye atomik yazım
+        try:  # Windows'ta dosya o an başka programda açıksa birkaç kez yeniden dener
+            guvenli_yaz(DURUM, json.dumps(_durum, ensure_ascii=False))
+        except OSError as e:  # durum yazılamadı diye kayıt durmasın; bir sonraki yazımda güncellenir
+            print(f"(durum dosyası şu an yazılamadı: {e})")
 
 
 def nabiz() -> None:
@@ -328,7 +331,32 @@ def main() -> None:
             # Kamera döngüsü burada döner; DURDUR dosyası ya da önizleme penceresinde 'q' ile biter
             kamera_modulu.BASLANGIC_KANCASI = kayit_basladi
             kamera_modulu.DURDUR_DOSYASI = DURDUR
-            kamera_modulu.CSV_KANCASI = lambda yol: (odak_csv.update(yol=Path(yol)), durum_yaz(odak_csv=str(yol)))
+            # Rızalı kişisel odak: yalnızca öğretmenin kaydettiği (rıza veren) öğrenciler tanınır
+            takip = None
+            kayitli = []
+            from core import ogrenci_db
+            try:
+                kayitli = ogrenci_db.yuz_izleri()
+                if kayitli:
+                    from sensing.focus.yuz_kimligi import KisiselTakip
+                    takip = KisiselTakip(kayitli, kaydet=ogrenci_db.odak_ekle)
+                    kamera_modulu.KISI_KANCASI = takip
+                    print(f"Rızalı kişisel odak açık: {len(kayitli)} kayıtlı öğrenci")
+                    durum_yaz(kayitli_ogrenci=len(kayitli))
+            except Exception as e:  # kişisel takip kurulamasa da sınıf ölçümü devam etsin
+                print(f"Kişisel odak başlatılamadı (yalnızca sınıf ortalaması ölçülecek): {e}")
+
+            def csv_geldi(yol):
+                odak_csv.update(yol=Path(yol))
+                durum_yaz(odak_csv=str(yol))
+                if takip is not None:
+                    takip.kayit = Path(yol).stem  # kişisel ölçümler bu dersin kaydına bağlanır
+                    try:  # bu derste aranan kayıtlı öğrenciler: hiç görülmeyen "derste yok" (odak 0) sayılır
+                        ogrenci_db.beklenenler_ekle(takip.kayit, [oid for oid, _, _ in kayitli])
+                    except Exception as e:
+                        print(f"Katılım listesi yazılamadı: {e}")
+
+            kamera_modulu.CSV_KANCASI = csv_geldi
             kamera_argv = ["classroom_focus", "--klasor", str(VERI / "kayitlar"), "--kamera", str(args.kamera),
                            "--grafik-yok", "--olay-sure", "10",
                            "--max-yuz", os.getenv("KAMERA_MAX_YUZ") or "30"]  # öğrenci sayısı için geniş tut

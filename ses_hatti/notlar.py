@@ -29,6 +29,7 @@ Tüm odak skorları 0-100 ölçeğindedir.
 """
 
 import csv
+from pathlib import Path
 import difflib
 import glob
 import json
@@ -48,6 +49,9 @@ try:  # arayüz projesindeki .env dosyasından GEMINI_API_KEY'i al
     load_dotenv()
 except ImportError:
     pass
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from llm import gemini_havuzu  # noqa: E402  (birden çok anahtar + yedek modeller)
 
 API_ANAHTARI = (os.environ.get("GEMINI_API_KEY") or "").strip()
 
@@ -99,29 +103,12 @@ def json_ayikla(metin) -> dict:
 
 
 def yapay_zekaya_sor(istemci, istem: str) -> dict:
-    """Her modeli, geçici hatalarda (yoğunluk / kota / bağlantı) kısa beklemelerle birkaç kez dener."""
-    son_hata = None
-    for model in MODELLER:
-        for bekle in (0, 2, 5):
-            time.sleep(bekle)
-            try:
-                yanit = istemci.models.generate_content(
-                    model=model,
-                    contents=istem,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        temperature=0.3,
-                    ),
-                )
-                return json_ayikla(yanit.text)
-            except Exception as e:
-                son_hata = e
-                gecici = any(k in str(e).lower() for k in GECICI_HATA)
-                print(f"  ({model} çalışmadı{', yeniden deneniyor' if gecici else ''}: {str(e)[:120]})")
-                if not gecici:  # model yok / anahtar geçersiz / bozuk yanıt: bu modeli tekrar deneme
-                    break
-    raise SystemExit(f"Hiçbir model yanıt vermedi. Son hata: {str(son_hata)[:300]}")
-
+    """Anahtar + model havuzu üzerinden (llm/gemini_havuzu.py): kota dolan anahtar/model atlanır, yedeğe geçilir."""
+    try:
+        metin, _ = gemini_havuzu.uret(istem, log=print)
+    except RuntimeError as e:
+        raise SystemExit(str(e))
+    return json_ayikla(metin)
 
 def _f(v, varsayilan=None):
     try:
@@ -357,6 +344,7 @@ def odagi_ekle(notlar: dict, odak_yol, odak) -> None:
     if not odak:
         return
     notlar["odak_serisi"] = [{"saniye": v["saniye"], "skor": round(v["skor"])} for v in odak]
+    notlar["odak_kaydi"] = Path(odak_yol).stem  # rızalı kişisel odak ölçümleri bu ada bağlıdır
     notlar["ortalama_odak"] = round(sum(v["skor"] for v in odak) / len(odak))
     sayi = ogrenci_sayisi_bul(odak_yol)
     if sayi:

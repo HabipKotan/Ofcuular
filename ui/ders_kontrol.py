@@ -66,7 +66,8 @@ def _gunluk_goster(acik: bool = False, satir: int = 30) -> None:
 
 def _surec_baslat(ek_argumanlar: list[str], ilk_durum: dict) -> None:
     DURDUR.unlink(missing_ok=True)
-    DURUM.write_text(json.dumps({**ilk_durum, "guncelleme": time.time()}, ensure_ascii=False), encoding="utf-8")
+    from core.dosya import guvenli_yaz
+    guvenli_yaz(DURUM, json.dumps({**ilk_durum, "guncelleme": time.time()}, ensure_ascii=False))
     komut = [sys.executable, "-u", str(PROJE / "ders_kaydi.py")] + ek_argumanlar
     # Ayrı terminal penceresi YOK: tüm çıktı ve hatalar günlük dosyasına yazılır, panel son satırları gösterir.
     # (Odak izleniyorsa kamera önizleme penceresi yine açılır.)

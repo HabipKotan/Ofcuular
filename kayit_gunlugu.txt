@@ -1,53 +1,74 @@
-Mikrofon: Kulaklık (HUAWEI FreeBuds SE 2) (44100 Hz)
-Calisiyor. Kayit: C:\Users\kotan\Desktop\hackathon\arayuz\kayitlar\dikkat_20261009_202944.csv
+Mikrofon: Mikrofon (Senary Audio) (44100 Hz)
+Calisiyor. Kayit: C:\Users\zeyti\Desktop\Yeni klasor\multimodal-lecture-assistant\kayitlar\dikkat_ey5t453_20261010_014100.csv
 WARNING: Logging before InitGoogle() is written to STDERR
-W0000 00:00:1791566984.987232   23400 face_landmarker_graph.cc:180] Sets FaceBlendshapesGraph acceleration to xnnpack by default.
+W0000 00:00:1791585660.062000    4524 face_landmarker_graph.cc:180] Sets FaceBlendshapesGraph acceleration to xnnpack by default.
 INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
-W0000 00:00:1791566985.001806   21524 inference_feedback_manager.cc:121] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
-W0000 00:00:1791566985.018085   21524 inference_feedback_manager.cc:121] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
-[20:29:49] skor= 99.1 ort= 99.1 yuz=1.0 yana=0.0 egik=0.0 kapali=0.0 esneme=0.0
-[20:29:55] skor=100.0 ort= 99.5 yuz=1.0 yana=0.0 egik=0.0 kapali=0.0 esneme=0.0
-[20:30:00] skor=100.0 ort= 99.7 yuz=1.0 yana=0.0 egik=0.0 kapali=0.0 esneme=0.0
-[20:30:05] skor= 99.1 ort= 99.5 yuz=1.0 yana=0.0 egik=0.0 kapali=0.0 esneme=0.0
-[20:30:09] skor=100.0 ort= 99.6 yuz=1.0 yana=0.0 egik=0.0 kapali=0.0 esneme=0.0
+W0000 00:00:1791585660.069739   25840 inference_feedback_manager.cc:121] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1791585660.079906    9780 inference_feedback_manager.cc:121] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+[01:41:05] skor= 99.3 ort= 99.3 yuz=1.0 yana=0.0 egik=0.0 kapali=0.0 esneme=0.0
+[01:41:10] skor=100.0 ort= 99.7 yuz=1.0 yana=0.0 egik=0.0 kapali=0.0 esneme=0.0
+[01:41:15] skor= 99.2 ort= 99.5 yuz=1.0 yana=0.0 egik=0.0 kapali=0.0 esneme=0.0
+[01:41:20] skor= 99.0 ort= 99.4 yuz=1.0 yana=0.0 egik=0.0 kapali=0.0 esneme=0.0
+[01:41:25] skor= 99.8 ort= 99.5 yuz=1.0 yana=0.0 egik=0.0 kapali=0.0 esneme=0.0
+[01:41:30] skor= 50.5 ort= 91.3 yuz=1.0 yana=0.15 egik=0.0 kapali=0.0 esneme=0.0
+[01:41:35] skor= 29.8 ort= 79.7 yuz=1.0 yana=0.0 egik=0.0 kapali=0.0 esneme=0.0
+[01:41:40] skor= 28.2 ort= 67.8 yuz=1.0 yana=0.0 egik=0.0 kapali=0.0 esneme=0.0
+[01:41:45] skor= 27.0 ort= 55.7 yuz=1.0 yana=0.0 egik=0.0 kapali=0.0 esneme=0.0
+   UYARI: dikkat 15 sn'dir dusuk - soru sormak ya da kisa bir mola iyi gelebilir.
+[01:41:50] skor= 81.7 ort= 52.8 yuz=1.0 yana=0.0 egik=0.0 kapali=0.0 esneme=0.0
+   OLAY: 01:41:30-01:41:45 dikkat dususu (15 sn, ort 28) -> belirsiz
 
 ==========================================================
- OTURUM OZETI
+ OTURUM OZETI - ey5t453
 ==========================================================
  Saate gore dikkat ortalamasi:
-   20:29:49  99.1  ####################
-   20:29:55 100.0  ####################
-   20:30:00 100.0  ####################
-   20:30:05  99.1  ####################
-   20:30:09 100.0  ####################
+   01:41:05  99.3  ####################
+   01:41:10 100.0  ####################
+   01:41:15  99.2  ####################
+   01:41:20  99.0  ####################
+   01:41:25  99.8  ####################
+   01:41:30  50.5  ##########
+   01:41:35  29.8  ######
+   01:41:40  28.2  ######
+   01:41:45  27.0  #####
+   01:41:50  81.7  ################
 ----------------------------------------------------------
- Baslangic - bitis : 20:29:44 - 20:30:09
- Genel ortalama    : 99.6
- En dusuk          : 20:29:49  (99.1)
- En yuksek         : 20:29:55  (100.0)
- Ortalama oranlar  : yana bakan %0 | basi egik %0 | gozu kapali %0
+ Baslangic - bitis : 01:41:00 - 01:41:50
+ Genel ortalama    : 71.5
+ En dusuk          : 01:41:45  (27.0)
+ En yuksek         : 01:41:10  (100.0)
+ Ogrenci sayisi    : 1  (kameranin gordugu kisi)
+ Ortalama oranlar  : yana bakan %1 | basi egik %0 | gozu kapali %0
  Esneme            : ortalama %0
 ----------------------------------------------------------
- Dikkat dususu olayi yok.
+ Dikkat dususu olaylari (1):
+   01:41:30 - 01:41:45    15 sn  ort 28, en dusuk 27  -> belirsiz
 ==========================================================
- Olcumler          : C:\Users\kotan\Desktop\hackathon\arayuz\kayitlar\dikkat_20261009_202944.csv
- Olaylar           : C:\Users\kotan\Desktop\hackathon\arayuz\kayitlar\dikkat_20261009_202944_olaylar.csv
- Ozet (JSON)       : C:\Users\kotan\Desktop\hackathon\arayuz\kayitlar\dikkat_20261009_202944_ozet.json
-Ses kaydedildi: C:\Users\kotan\Desktop\hackathon\arayuz\ders.wav (7 sn)
-
-=== Transkript ===
-Model yükleniyor (medium)... İlk çalıştırmada model indirilir, biraz sürebilir.
-'C:\Users\kotan\Desktop\hackathon\arayuz\ders.wav' metne çevriliyor...
-[00:01] Altyazı M.K.
-
-Bitti (13 sn). 1 parça.
-Kaydedildi: transkript.json, transkript.txt
-
-=== Notlar ===
-Notlar çıkarılıyor...
-Kayıtta ders anlatımı algılanamadı; not üretilmedi.
-Odak verisi: C:\Users\kotan\Desktop\hackathon\arayuz\kayitlar\dikkat_20261009_202944.csv (5 ölçüm). Bölümlerle eşleştiriliyor...
-
-Bitti. Kaydedildi: notlar.json, notlar.md
-
-Bitti. Arayüz yeni dersi gösterecek.
+ Olcumler          : C:\Users\zeyti\Desktop\Yeni klasor\multimodal-lecture-assistant\kayitlar\dikkat_ey5t453_20261010_014100.csv
+ Olaylar           : C:\Users\zeyti\Desktop\Yeni klasor\multimodal-lecture-assistant\kayitlar\dikkat_ey5t453_20261010_014100_olaylar.csv
+ Ozet (JSON)       : C:\Users\zeyti\Desktop\Yeni klasor\multimodal-lecture-assistant\kayitlar\dikkat_ey5t453_20261010_014100_ozet.json
+HATA: Input timestamp must be monotonically increasing.
+Traceback (most recent call last):
+  File "C:\Users\zeyti\Desktop\Yeni klasor\multimodal-lecture-assistant\ders_kaydi.py", line 370, in main
+    kamera_modulu.main()
+  File "C:\Users\zeyti\Desktop\Yeni klasor\multimodal-lecture-assistant\sensing\focus\classroom_focus.py", line 807, in main
+    calistir(args)
+  File "C:\Users\zeyti\Desktop\Yeni klasor\multimodal-lecture-assistant\sensing\focus\classroom_focus.py", line 663, in calistir
+    sonuc = dedektor.detect_for_video(goruntu, int((simdi - baslangic) * 1000))
+  File "C:\Users\zeyti\Desktop\Yeni klasor\multimodal-lecture-assistant\.venv\lib\site-packages\mediapipe\tasks\python\vision\face_landmarker.py", line 3265, in detect_for_video
+    self._lib.MpFaceLandmarkerDetectForVideo(  # pyrefly: ignore[missing-attribute]
+  File "C:\Users\zeyti\Desktop\Yeni klasor\multimodal-lecture-assistant\.venv\lib\site-packages\mediapipe\tasks\python\core\serial_dispatcher.py", line 74, in shutdown_aware_handler
+    return handler(*args, **kwargs)
+  File "C:\Users\zeyti\Desktop\Yeni klasor\multimodal-lecture-assistant\.venv\lib\site-packages\mediapipe\tasks\python\core\mediapipe_c_utils.py", line 142, in dispatcher_wrapper
+    executor.submit(dispatch_and_free).result()
+  File "C:\Users\zeyti\AppData\Local\Programs\Python\Python310\lib\concurrent\futures\_base.py", line 458, in result
+    return self.__get_result()
+  File "C:\Users\zeyti\AppData\Local\Programs\Python\Python310\lib\concurrent\futures\_base.py", line 403, in __get_result
+    raise self._exception
+  File "C:\Users\zeyti\AppData\Local\Programs\Python\Python310\lib\concurrent\futures\thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+  File "C:\Users\zeyti\Desktop\Yeni klasor\multimodal-lecture-assistant\.venv\lib\site-packages\mediapipe\tasks\python\core\mediapipe_c_utils.py", line 137, in dispatch_and_free
+    handle_status(status, error_msg)
+  File "C:\Users\zeyti\Desktop\Yeni klasor\multimodal-lecture-assistant\.venv\lib\site-packages\mediapipe\tasks\python\core\mediapipe_c_utils.py", line 232, in handle_status
+    raise exception
+ValueError: Input timestamp must be monotonically increasing.
