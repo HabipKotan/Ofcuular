@@ -9,8 +9,10 @@ plotly>=5.20
 
 # LLM
 anthropic>=0.40
+google-genai>=1.0
 
-# Uçta algılama (adım 6'da kullanılacak)
-# mediapipe>=0.10
-# opencv-python>=4.9
-# faster-whisper>=1.0
+# Uçta algılama + ses (Dersi Başlat / Bitir)
+mediapipe>=0.10
+opencv-python>=4.9
+faster-whisper>=1.0
+sounddevice>=0.4

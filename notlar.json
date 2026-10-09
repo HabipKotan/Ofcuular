@@ -1,0 +1,31 @@
+{
+  "ders_basligi": "Ders anlatımı algılanamadı",
+  "ders_ozeti": "Kayıtta bir ders anlatımı tespit edilemedi (yalnızca deneme konuşması ya da anlaşılmayan ses). Ham transkripte bakabilir, mikrofona yakın ve net konuşarak yeniden kaydedebilirsiniz.",
+  "bolumler": [],
+  "quiz": [],
+  "sure_saniye": 3.0,
+  "ders_algilanmadi": true,
+  "odak_serisi": [
+    {
+      "saniye": 5.0,
+      "skor": 99
+    },
+    {
+      "saniye": 10.0,
+      "skor": 100
+    },
+    {
+      "saniye": 15.0,
+      "skor": 100
+    },
+    {
+      "saniye": 20.0,
+      "skor": 99
+    },
+    {
+      "saniye": 24.0,
+      "skor": 100
+    }
+  ],
+  "ortalama_odak": 100
+}

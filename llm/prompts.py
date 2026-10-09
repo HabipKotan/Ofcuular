@@ -21,7 +21,9 @@ Kurallar:
 RECOVERY_CARD_USER_PROMPT = """Ders Konusu: {topic}
 Kaçırılan Zaman Aralığı: {gap_start:.0f}. sn - {gap_end:.0f}. sn
 Ders Sırasında Kaçırılan Anlatım / Metin:
-"""{missed_transcript}"""
+---
+{missed_transcript}
+---
 
 Lütfen yukarıdaki kaçırılan içerik için aşağıdaki JSON şemasına birebir uygun çıktı üret:
 {{
@@ -61,7 +63,9 @@ Kurallar:
 LECTURE_NOTES_USER_PROMPT = """Ders Başlığı: {title}
 Ders Alanı: {subject} / {grade_level}
 Ders Transkripti:
-"""{full_transcript}"""
+---
+{full_transcript}
+---
 
 Lütfen aşağıdaki JSON şemasına tam uygun bir ders notu üret:
 {{

@@ -1,0 +1,1134 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Ders Defteri</title>
+<style>
+  :root {
+    --zemin: #f1efe9; --kagit: #fffdf8; --kagit-cizgi: #d9dfe8; --murekkep: #1b1b1a;
+    --panel: #ffffff; --panel-kenar: #dcd9d1; --yazi: #1b1b1a; --yazi-soluk: #6b6962;
+    --vurgu: #2a5fd0; --vurgu-zemin: #e4ecfb; --dugme: #f4f2ed; --tehlike: #c0392b;
+    --golge: 0 6px 24px rgba(0,0,0,.14);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --zemin: #111110; --kagit: #1d1d1b; --kagit-cizgi: #33363c; --murekkep: #f2f1ec;
+      --panel: #262624; --panel-kenar: #3a3a37; --yazi: #f2f1ec; --yazi-soluk: #a3a199;
+      --vurgu: #7ea6f5; --vurgu-zemin: #2b3a57; --dugme: #32322f; --tehlike: #ef7a6d;
+      --golge: 0 6px 24px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --zemin: #111110; --kagit: #1d1d1b; --kagit-cizgi: #33363c; --murekkep: #f2f1ec;
+    --panel: #262624; --panel-kenar: #3a3a37; --yazi: #f2f1ec; --yazi-soluk: #a3a199;
+    --vurgu: #7ea6f5; --vurgu-zemin: #2b3a57; --dugme: #32322f; --tehlike: #ef7a6d;
+    --golge: 0 6px 24px rgba(0,0,0,.5);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--zemin); color: var(--yazi); overflow: hidden;
+    font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column; -webkit-user-select: none; user-select: none;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  svg.ikon { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8;
+             stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+  /* ---- ust cubuk ---- */
+  header {
+    flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+    background: var(--panel); border-bottom: 1px solid var(--panel-kenar); z-index: 5;
+  }
+  #ders { flex: 1; min-width: 0; font: inherit; font-weight: 600; font-size: 16px; color: var(--yazi);
+          background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 6px 8px;
+          -webkit-user-select: text; user-select: text; }
+  #ders:hover, #ders:focus { border-color: var(--panel-kenar); outline: none; background: var(--dugme); }
+  #durum { color: var(--yazi-soluk); font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .kare { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 10px;
+          border: 1px solid transparent; background: transparent; }
+  .kare:hover { background: var(--dugme); }
+  .kare:disabled { opacity: .35; cursor: default; background: transparent; }
+  header.sure-bitti { animation: yanip 0.5s 6 alternate; }
+  @keyframes yanip { to { background: var(--vurgu-zemin); } }
+
+  .birincil { height: 38px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--vurgu);
+              background: var(--vurgu); color: var(--panel); font-weight: 600; white-space: nowrap; }
+  .birincil.calisiyor { background: transparent; color: var(--tehlike); border-color: var(--tehlike); }
+  #ders-sure { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  body.kilitli #canli { cursor: not-allowed !important; }
+  #kilit { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); z-index: 2; pointer-events: none;
+           background: var(--panel); color: var(--yazi); border: 1px solid var(--panel-kenar); border-radius: 12px;
+           box-shadow: var(--golge); padding: 12px 18px; font-size: 15px; text-align: center; max-width: calc(100% - 32px); }
+  body:not(.kilitli) #kilit { display: none; }
+  .birincil.dikkat { animation: salla .35s 2; }
+  @keyframes salla { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+
+  #geri-don { height: 38px; padding: 0 12px 0 6px; border-radius: 10px; border: 1px solid var(--panel-kenar);
+              background: var(--dugme); display: flex; align-items: center; gap: 2px; font-weight: 600; white-space: nowrap; }
+  #geri-don[hidden] { display: none; }
+  #onizleme { position: absolute; z-index: 3; pointer-events: none; background: var(--panel); border: 1px solid var(--panel-kenar);
+              border-radius: 12px; box-shadow: var(--golge); padding: 8px; }
+  #onizleme[hidden] { display: none; }
+  #onizleme canvas { display: block; width: 240px; height: 170px; border-radius: 6px; border: 1px solid var(--panel-kenar); }
+  #onizleme div { font-size: 12.5px; margin-top: 6px; color: var(--yazi-soluk); max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #onizleme b { color: var(--yazi); }
+  body.defter-ustu #canli { cursor: pointer !important; }
+
+  /* ---- ogretici ---- */
+  #ogretici { position: fixed; inset: 0; z-index: 50; }
+  #isik { position: absolute; border-radius: 12px; box-shadow: 0 0 0 9999px rgba(0,0,0,.58), 0 0 0 2px var(--vurgu);
+          transition: all .2s ease; pointer-events: none; }
+  #kart { position: absolute; width: min(330px, calc(100vw - 24px)); background: var(--panel); color: var(--yazi);
+          border: 1px solid var(--panel-kenar); border-radius: 14px; box-shadow: var(--golge); padding: 14px;
+          transition: left .2s ease, top .2s ease; }
+  #kart .sira { font-size: 12px; color: var(--yazi-soluk); font-variant-numeric: tabular-nums; }
+  #kart h3 { margin: 2px 0 6px; font-size: 16px; }
+  #kart p { margin: 0 0 12px; font-size: 14px; line-height: 1.45; }
+  #kart .dugmeler { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  #kart .dugmeler .bosluk { flex: 1; }
+  #kart button { height: 36px; padding: 0 12px; border-radius: 9px; border: 1px solid transparent; background: var(--dugme); font-size: 13px; }
+  #kart button.birincil { background: var(--vurgu); color: var(--panel); border-color: var(--vurgu); }
+  #kart button.metin-dugme { background: transparent; color: var(--yazi-soluk); padding: 0 6px; text-decoration: underline; }
+  #kart button:disabled { opacity: .4; cursor: default; }
+
+  /* ---- defter ---- */
+  main { flex: 1; position: relative; min-height: 0; }
+  #kaydir { position: absolute; inset: 0; overflow-y: scroll; overflow-x: hidden; overscroll-behavior: contain; }
+  #sahne { position: sticky; top: 0; height: 0; z-index: 1; }
+  #sahne canvas { position: absolute; left: 0; top: 0; display: block; touch-action: none; }
+  #taban { background: var(--kagit); }
+  #uzunluk { position: relative; width: 100%; pointer-events: none; }
+  #uzunluk textarea {
+    position: absolute; pointer-events: auto; z-index: 3; min-width: 120px; min-height: 1.4em; resize: none;
+    background: var(--kagit); border: 1.5px dashed var(--vurgu); border-radius: 4px; padding: 2px 4px;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; line-height: 1.3; outline: none;
+    overflow: hidden; -webkit-user-select: text; user-select: text;
+  }
+  body[data-arac="kalem"] #canli, body[data-arac="fosfor"] #canli,
+  body[data-arac="cizgi"] #canli, body[data-arac="ok"] #canli,
+  body[data-arac="kutu"] #canli, body[data-arac="elips"] #canli { cursor: crosshair; }
+  body[data-arac="silgi"] #canli, body[data-arac="nokta"] #canli { cursor: cell; }
+  body[data-arac="metin"] #canli { cursor: text; }
+  body[data-arac="saat"] #canli, body[data-arac="defter"] #canli { cursor: copy; }
+
+  /* ---- yan panel ---- */
+  #panel {
+    position: absolute; top: 10px; right: 10px; bottom: 10px; width: 248px; max-width: calc(100% - 60px);
+    background: var(--panel); border: 1px solid var(--panel-kenar); border-radius: 14px; box-shadow: var(--golge);
+    z-index: 4; display: flex; flex-direction: column; transition: transform .22s ease;
+  }
+  body.panel-kapali #panel { transform: translateX(calc(100% + 10px)); box-shadow: none; }
+  #kulak {
+    position: absolute; left: -31px; top: 50%; transform: translateY(-50%); width: 31px; height: 72px;
+    background: var(--panel); border: 1px solid var(--panel-kenar); border-right: none;
+    border-radius: 12px 0 0 12px; display: grid; place-items: center; padding: 0;
+    box-shadow: -4px 2px 10px rgba(0,0,0,.08);
+  }
+  #kulak svg { transition: transform .22s; }
+  body.panel-kapali #kulak svg { transform: rotate(180deg); }
+  #panel-ic { overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 14px; }
+  #panel h2 { margin: 0 0 6px; font-size: 12px; font-weight: 600; letter-spacing: .04em;
+              text-transform: uppercase; color: var(--yazi-soluk); }
+  .izgara { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .arac { line-height: 1.1; height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+          border-radius: 10px; border: 1px solid transparent; background: var(--dugme); font-size: 10.5px; padding: 0; }
+  .arac[aria-pressed="true"] { background: var(--vurgu-zemin); border-color: var(--vurgu); color: var(--vurgu); }
+  .renkler { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .renk { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--panel); padding: 0;
+          box-shadow: 0 0 0 1px var(--panel-kenar); }
+  .renk[aria-pressed="true"] { box-shadow: 0 0 0 2.5px var(--vurgu); }
+  #kagit-renkler .renk { border-radius: 8px; }
+  .renk.oto { background: linear-gradient(135deg, #fffdf8 50%, #1d1d1b 50%); }
+  .ozel-sar { display: block; overflow: hidden; cursor: pointer;
+              background: conic-gradient(#e34948, #eda100, #1baf7a, #2a78d6, #7a4fd0, #e34948); }
+  .ozel-sar input { width: 100%; height: 100%; opacity: 0; padding: 0; border: none; cursor: pointer; }
+  .satir { display: flex; align-items: center; gap: 10px; }
+  input[type=range] { flex: 1; accent-color: var(--vurgu); min-width: 0; }
+  #kalinlik-deger { width: 30px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; flex: none; }
+  #onizle { width: 44px; height: 30px; display: grid; place-items: center; flex: none; }
+  #onizle i { display: block; border-radius: 99px; background: var(--murekkep); }
+  .secenek { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .secenek button, .duz { height: 36px; border-radius: 9px; border: 1px solid transparent;
+                          background: var(--dugme); font-size: 12.5px; padding: 0 8px; }
+  .secenek button[aria-pressed="true"] { background: var(--vurgu-zemin); border-color: var(--vurgu); color: var(--vurgu); }
+  .duz { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; }
+  .duz.tehlike { color: var(--tehlike); }
+  .ikili { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  label.anahtar { display: flex; align-items: center; gap: 8px; font-size: 13.5px; cursor: pointer; }
+  label.anahtar input { width: 18px; height: 18px; accent-color: var(--vurgu); }
+  #sayac { font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: center; margin: 2px 0 6px; }
+  .not { font-size: 12px; color: var(--yazi-soluk); margin: 6px 0 0; }
+</style>
+</head>
+<body data-arac="kalem">
+
+<header id="ust">
+  <button id="geri-don" hidden title="Bir önceki deftere dön"><svg class="ikon" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg><span>Ana defter</span></button>
+  <input id="ders" placeholder="Ders adı (örn. Matematik 9-A)" aria-label="Ders adı" autocomplete="off">
+  <span id="ders-sure" hidden title="Ders süresi">00:00</span>
+  <button class="birincil" id="ders-dugme">Dersi başlat</button>
+  <span id="durum" aria-live="polite"></span>
+  <button class="kare" id="geri" title="Geri al (Ctrl+Z)" aria-label="Geri al"><svg class="ikon" viewBox="0 0 24 24"><path d="M9 5L4 10l5 5M4 10h10a5 5 0 010 10h-4"/></svg></button>
+  <button class="kare" id="ileri" title="Yinele (Ctrl+Y)" aria-label="Yinele"><svg class="ikon" viewBox="0 0 24 24"><path d="M15 5l5 5-5 5M20 10H10a5 5 0 000 10h4"/></svg></button>
+</header>
+
+<main>
+  <div id="kaydir">
+    <div id="sahne"><canvas id="taban"></canvas><canvas id="canli"></canvas></div>
+    <div id="uzunluk"></div>
+  </div>
+
+  <div id="onizleme" hidden><canvas></canvas><div></div></div>
+  <div id="kilit">Yazmak ve çizmek için önce <b>Dersi başlat</b>'a basın.</div>
+
+  <aside id="panel" aria-label="Araçlar">
+    <button id="kulak" title="Araç panelini aç/kapat" aria-label="Araç panelini aç/kapat" aria-expanded="true"><svg class="ikon" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+    <div id="panel-ic">
+      <section>
+        <h2>Araçlar</h2>
+        <div class="izgara" id="araclar">
+          <button class="arac" data-arac="kalem" title="Kalem (K)"><svg class="ikon" viewBox="0 0 24 24"><path d="M4 20l4-1L19 8l-3-3L5 16l-1 4z"/></svg>Kalem</button>
+          <button class="arac" data-arac="fosfor" title="Fosforlu kalem (F)"><svg class="ikon" viewBox="0 0 24 24"><path d="M8 14l8-9 4 4-9 8H8v-3zM8 17l-3 3h5"/></svg>Fosfor</button>
+          <button class="arac" data-arac="nokta" title="Silgi: yalnızca üzerinden geçtiğiniz yeri siler (S)"><svg class="ikon" viewBox="0 0 24 24"><path d="M4 15l9-9 6 6-7 7H8l-4-4zM12 19h8"/></svg>Silgi</button>
+          <button class="arac" data-arac="silgi" title="Çizgi sil: dokunduğu çizgiyi bütün olarak siler (D)"><svg class="ikon" viewBox="0 0 24 24"><path d="M4 15l9-9 6 6-7 7H8l-4-4z"/><path d="M15 17l5 5M20 17l-5 5"/></svg>Çizgi sil</button>
+          <button class="arac" data-arac="metin" title="Metin (T)"><svg class="ikon" viewBox="0 0 24 24"><path d="M5 6h14M12 6v13M9 19h6"/></svg>Metin</button>
+          <button class="arac" data-arac="cizgi" title="Düz çizgi"><svg class="ikon" viewBox="0 0 24 24"><path d="M5 19L19 5"/></svg>Çizgi</button>
+          <button class="arac" data-arac="ok" title="Ok"><svg class="ikon" viewBox="0 0 24 24"><path d="M5 19L19 5M10 5h9v9"/></svg>Ok</button>
+          <button class="arac" data-arac="kutu" title="Dikdörtgen"><svg class="ikon" viewBox="0 0 24 24"><path d="M4 6h16v12H4z"/></svg>Kutu</button>
+          <button class="arac" data-arac="elips" title="Elips"><svg class="ikon" viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8.5" ry="6.5"/></svg>Elips</button>
+          <button class="arac" data-arac="saat" title="Dokunduğunuz yere şu anki saati yazar"><svg class="ikon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>Saat</button>
+          <button class="arac" data-arac="defter" title="Not defteri: dokunduğunuz yere ayrı bir not defteri koyar ve açar"><svg class="ikon" viewBox="0 0 24 24"><path d="M7 4h11a1 1 0 011 1v14a1 1 0 01-1 1H7zM7 4v16M4 8h3M4 12h3M4 16h3M11 9h5M11 13h5"/></svg>Not defteri</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>Renk</h2>
+        <div class="renkler" id="renkler"></div>
+      </section>
+
+      <section>
+        <h2>Kalınlık</h2>
+        <div class="satir"><input id="kalinlik" type="range" min="1" max="100" step="1" aria-label="Kalınlık (1-100)"><output id="kalinlik-deger" for="kalinlik">1</output><span id="onizle"><i></i></span></div>
+      </section>
+
+      <section>
+        <h2>Kâğıt</h2>
+        <div class="secenek" id="kagitlar">
+          <button data-kagit="duz">Düz</button><button data-kagit="cizgili">Çizgili</button>
+          <button data-kagit="kareli">Kareli</button><button data-kagit="noktali">Noktalı</button>
+        </div>
+        <div class="renkler" id="kagit-renkler" style="margin-top:10px" aria-label="Arka plan rengi"></div>
+      </section>
+
+      <section>
+        <h2>Giriş</h2>
+        <label class="anahtar"><input type="checkbox" id="parmak"> Parmakla çiz</label>
+        <p class="not">Kapalıyken parmak sayfayı kaydırır, kalem çizer.</p>
+      </section>
+
+      <section>
+        <h2>Geri sayım</h2>
+        <div id="sayac">05:00</div>
+        <div class="secenek" style="margin-bottom:6px">
+          <button data-dk="1">1 dk</button><button data-dk="3">3 dk</button>
+          <button data-dk="5">5 dk</button><button data-dk="10">10 dk</button>
+        </div>
+        <div class="ikili"><button class="duz" id="sayac-baslat">Başlat</button><button class="duz" id="sayac-sifirla">Sıfırla</button></div>
+      </section>
+
+      <section>
+        <h2>Defter</h2>
+        <div class="ikili" style="margin-bottom:6px">
+          <button class="duz" id="png">PNG indir</button><button class="duz" id="json">JSON indir</button>
+        </div>
+        <button class="duz" id="yukle" style="margin-bottom:6px">JSON'dan aç</button>
+        <button class="duz" id="ogretici-ac" style="margin-bottom:6px">Öğreticiyi göster</button>
+        <button class="duz tehlike" id="temizle">Tümünü temizle</button>
+        <input type="file" id="dosya" accept="application/json,.json" hidden>
+        <p class="not">Notlar bu tarayıcıda otomatik saklanır. Her çizginin yazıldığı saat JSON'a kaydedilir.</p>
+      </section>
+    </div>
+  </aside>
+</main>
+
+<div id="ogretici" hidden>
+  <div id="isik"></div>
+  <div id="kart" role="dialog" aria-modal="true" aria-labelledby="kart-baslik">
+    <div class="sira" id="kart-sira"></div>
+    <h3 id="kart-baslik"></h3>
+    <p id="kart-metin"></p>
+    <div class="dugmeler">
+      <button id="og-geri">Geri</button>
+      <button id="og-ileri" class="birincil">İleri</button>
+      <span class="bosluk"></span>
+      <button id="og-atla" class="metin-dugme">Hepsini atla</button>
+      <button id="og-asla" class="metin-dugme">Bir daha gösterme</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const kaydir = $('#kaydir'), sahne = $('#sahne'), uzunluk = $('#uzunluk');
+const taban = $('#taban'), canli = $('#canli');
+const tctx = taban.getContext('2d'), cctx = canli.getContext('2d');
+const ANAHTAR = 'ders-defteri-v1';
+const YAZI_TIPI = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+const RENKLER = [
+  ['murekkep', 'Mürekkep'], ['#d03b3b', 'Kırmızı'], ['#2a78d6', 'Mavi'], ['#1a8f3c', 'Yeşil'],
+  ['#eb6834', 'Turuncu'], ['#7a4fd0', 'Mor'], ['#ffd400', 'Sarı'],
+];
+
+/* ------------------------------------------------------------------ durum */
+let ogeler = [];            // defterdeki her sey (vektor); sirasi cizim sirasidir
+let geriYigin = [], ileriYigin = [];
+let kagit = 'cizgili', kagitRenk = 'varsayilan', arac = 'kalem', parmakCiz = false;
+let dersBas = null, dersBit = null, dersAd = '';
+let yigin = [];   // acik ic defterler: her kat { ogeler, geriYigin, ileriYigin, kaydirma, oge }   // ders sayaci (ms)
+const SILGILER = ['silgi', 'nokta'];
+const KAGIT_RENKLERI = [
+  ['varsayilan', 'Varsayılan'], ['#ffffff', 'Beyaz'], ['#fdf3d7', 'Krem'], ['#fff7b0', 'Sarı'], ['#dff3dc', 'Yeşil'],
+  ['#dcecfb', 'Mavi'], ['#fde3ec', 'Pembe'], ['#1f3b2d', 'Kara tahta'], ['#111111', 'Siyah'],
+];
+const ayar = {              // arac basina renk + kalinlik
+  kalem: { renk: 'murekkep', w: 2.88 }, fosfor: { renk: '#ffd400', w: 18 }, silgi: { renk: null, w: 16 }, nokta: { renk: null, w: 14 },
+  metin: { renk: 'murekkep', w: 4 }, cizgi: { renk: 'murekkep', w: 3 }, ok: { renk: 'murekkep', w: 3 },
+  defter: { renk: null, w: 3 },
+  kutu: { renk: 'murekkep', w: 3 }, elips: { renk: 'murekkep', w: 3 }, saat: { renk: '#2a78d6', w: 3 },
+};
+let gen = 0, yuk = 0, dpr = 1, belgeBoyu = 0;
+const kutular = new WeakMap();   // oge -> [x1,y1,x2,y2]
+
+const css = ad => getComputedStyle(document.documentElement).getPropertyValue(ad).trim();
+const renkCoz = r => r === 'murekkep' ? css('--murekkep') : r;
+
+/* ------------------------------------------------------------------ geometri */
+function kutu(o) {
+  let k = kutular.get(o);
+  if (k) return k;
+  if (o.k === 'yol') {
+    let x1 = 1e9, y1 = 1e9, x2 = -1e9, y2 = -1e9;
+    for (let i = 0; i < o.n.length; i += 3) {
+      x1 = Math.min(x1, o.n[i]); x2 = Math.max(x2, o.n[i]);
+      y1 = Math.min(y1, o.n[i + 1]); y2 = Math.max(y2, o.n[i + 1]);
+    }
+    const p = o.w;  // basinc ile kalinlasabilir
+    k = [x1 - p, y1 - p, x2 + p, y2 + p];
+  } else if (o.k === 'defter') {
+    k = [o.x - 20, o.y - 2, o.x + 66, o.y + 74];
+  } else if (o.k === 'metin') {
+    const satirlar = o.metin.split('\n');
+    tctx.save(); tctx.setTransform(1, 0, 0, 1, 0, 0); tctx.font = `${o.boyut}px ${YAZI_TIPI}`;
+    const en = Math.max(...satirlar.map(s => tctx.measureText(s).width));
+    tctx.restore();
+    k = [o.x, o.y, o.x + en, o.y + satirlar.length * o.boyut * 1.3];
+  } else {
+    const p = o.w + (o.k === 'ok' ? 14 : 0);
+    k = [Math.min(o.x1, o.x2) - p, Math.min(o.y1, o.y2) - p, Math.max(o.x1, o.x2) + p, Math.max(o.y1, o.y2) + p];
+  }
+  kutular.set(o, k);
+  return k;
+}
+function parcaUzaklik(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+  let t = l2 ? ((px - ax) * dx + (py - ay) * dy) / l2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - ax - t * dx, py - ay - t * dy);
+}
+function cevre(o) {   // sekillerin dis hatti, nokta dizisi olarak
+  if (o.k === 'kutu') return [o.x1, o.y1, o.x2, o.y1, o.x2, o.y2, o.x1, o.y2, o.x1, o.y1];
+  if (o.k === 'elips') {
+    const cx = (o.x1 + o.x2) / 2, cy = (o.y1 + o.y2) / 2, rx = Math.abs(o.x2 - o.x1) / 2, ry = Math.abs(o.y2 - o.y1) / 2;
+    const n = [];
+    for (let i = 0; i <= 36; i++) n.push(cx + rx * Math.cos(i * Math.PI / 18), cy + ry * Math.sin(i * Math.PI / 18));
+    return n;
+  }
+  return [o.x1, o.y1, o.x2, o.y2];
+}
+function dokunuyor(o, x, y, r) {
+  const k = kutu(o);
+  if (x < k[0] - r || x > k[2] + r || y < k[1] - r || y > k[3] + r) return false;
+  if (o.k === 'metin' || o.k === 'defter') return true;
+  if (o.k === 'yol') {
+    const n = o.n, esik = r + o.w / 2;
+    if (n.length === 3) return Math.hypot(x - n[0], y - n[1]) <= esik;
+    for (let i = 3; i < n.length; i += 3)
+      if (parcaUzaklik(x, y, n[i - 3], n[i - 2], n[i], n[i + 1]) <= esik) return true;
+    return false;
+  }
+  const c = cevre(o), esik = r + o.w / 2;
+  for (let i = 2; i < c.length; i += 2)
+    if (parcaUzaklik(x, y, c[i - 2], c[i - 1], c[i], c[i + 1]) <= esik) return true;
+  return false;
+}
+
+function siklastir(n) {   // noktalar arasi en fazla ~3px olacak sekilde ara nokta ekler
+  const s = [n[0], n[1], n[2]];
+  for (let i = 3; i < n.length; i += 3) {
+    const ax = n[i - 3], ay = n[i - 2], ap = n[i - 1], bx = n[i], by = n[i + 1], bp = n[i + 2];
+    const adim = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 3));
+    for (let j = 1; j <= adim; j++) { const t = j / adim; s.push(ax + (bx - ax) * t, ay + (by - ay) * t, ap + (bp - ap) * t); }
+  }
+  return s;
+}
+function yolaCevir(o) {   // her ogeyi (sekiller dahil) sik noktali yol parcalarina cevirir
+  const temel = { k: 'yol', renk: o.renk, w: o.w, t: o.t };
+  if (o.fosfor) temel.fosfor = 1;
+  if (o.basinc) temel.basinc = 1;
+  const uclu = c => { const n = []; for (let i = 0; i < c.length; i += 2) n.push(c[i], c[i + 1], 0.5); return n; };
+  let hatlar;
+  if (o.k === 'yol') hatlar = [o.n];
+  else {
+    hatlar = [uclu(cevre(o))];
+    if (o.k === 'ok') {
+      const a = Math.atan2(o.y2 - o.y1, o.x2 - o.x1), b = 8 + o.w * 2.2;
+      hatlar.push(uclu([o.x2 - b * Math.cos(a - 0.45), o.y2 - b * Math.sin(a - 0.45), o.x2, o.y2,
+                        o.x2 - b * Math.cos(a + 0.45), o.y2 - b * Math.sin(a + 0.45)]));
+    }
+  }
+  return hatlar.map(n => ({ ...temel, n: siklastir(n) }));
+}
+function parcala(o, x, y, r) {   // silginin degdigi noktalari cikarir; kalan parcalari doner (degismediyse null)
+  const kalan = []; let cikti = false;
+  for (const p of yolaCevir(o)) {
+    const n = p.n; let dizi = [];
+    const bitir = () => { if (dizi.length >= 6 || (dizi.length === 3 && n.length === 3)) kalan.push({ ...p, n: dizi }); dizi = []; };
+    for (let i = 0; i < n.length; i += 3) {
+      if (Math.hypot(n[i] - x, n[i + 1] - y) <= r) { cikti = true; bitir(); }
+      else dizi.push(n[i], n[i + 1], n[i + 2]);
+    }
+    bitir();
+  }
+  return cikti ? kalan : null;
+}
+
+/* ------------------------------------------------------------------ cizim */
+function ogeCiz(ctx, o) {
+  ctx.save();
+  const renk = renkCoz(o.renk);
+  ctx.strokeStyle = renk; ctx.fillStyle = renk; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = o.w;
+  if (o.k === 'yol') {
+    const n = o.n;
+    if (o.fosfor) ctx.globalAlpha = 0.33;
+    if (n.length === 3) {
+      ctx.beginPath(); ctx.arc(n[0], n[1], o.w / 2, 0, Math.PI * 2); ctx.fill();
+    } else if (o.basinc) {
+      for (let i = 3; i < n.length; i += 3) {       // kalem basincina gore degisen kalinlik
+        ctx.lineWidth = o.w * (0.35 + 1.3 * (n[i - 1] + n[i + 2]) / 2);
+        ctx.beginPath(); ctx.moveTo(n[i - 3], n[i - 2]); ctx.lineTo(n[i], n[i + 1]); ctx.stroke();
+      }
+    } else {
+      ctx.beginPath(); ctx.moveTo(n[0], n[1]);
+      for (let i = 3; i < n.length - 3; i += 3)
+        ctx.quadraticCurveTo(n[i], n[i + 1], (n[i] + n[i + 3]) / 2, (n[i + 1] + n[i + 4]) / 2);
+      ctx.lineTo(n[n.length - 3], n[n.length - 2]); ctx.stroke();
+    }
+  } else if (o.k === 'defter') {            // ic defter simgesi + adi
+    const x = o.x, y = o.y;
+    ctx.lineWidth = 1.8; ctx.strokeStyle = css('--vurgu'); ctx.fillStyle = css('--vurgu-zemin');
+    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x + 6, y, 40, 52, 6) : ctx.rect(x + 6, y, 40, 52); ctx.fill(); ctx.stroke();
+    ctx.beginPath();
+    for (let i = 0; i < 4; i++) { ctx.moveTo(x + 1, y + 9 + i * 11.5); ctx.lineTo(x + 11, y + 9 + i * 11.5); }
+    for (let i = 0; i < 3; i++) { ctx.moveTo(x + 17, y + 15 + i * 10); ctx.lineTo(x + (i === 2 ? 30 : 38), y + 15 + i * 10); }
+    ctx.stroke();
+    ctx.fillStyle = css('--murekkep'); ctx.font = `600 12px ${YAZI_TIPI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    const ad = o.ad || 'Not'; ctx.fillText(ad.length > 13 ? ad.slice(0, 12) + '…' : ad, x + 23, y + 57);
+  } else if (o.k === 'metin') {
+    ctx.font = `${o.boyut}px ${YAZI_TIPI}`; ctx.textBaseline = 'top';
+    o.metin.split('\n').forEach((s, i) => ctx.fillText(s, o.x, o.y + i * o.boyut * 1.3 + o.boyut * 0.12));
+  } else if (o.k === 'kutu') {
+    ctx.strokeRect(Math.min(o.x1, o.x2), Math.min(o.y1, o.y2), Math.abs(o.x2 - o.x1), Math.abs(o.y2 - o.y1));
+  } else if (o.k === 'elips') {
+    ctx.beginPath();
+    ctx.ellipse((o.x1 + o.x2) / 2, (o.y1 + o.y2) / 2, Math.abs(o.x2 - o.x1) / 2, Math.abs(o.y2 - o.y1) / 2, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  } else {
+    ctx.beginPath(); ctx.moveTo(o.x1, o.y1); ctx.lineTo(o.x2, o.y2); ctx.stroke();
+    if (o.k === 'ok') {
+      const a = Math.atan2(o.y2 - o.y1, o.x2 - o.x1), b = 8 + o.w * 2.2;
+      ctx.beginPath();
+      ctx.moveTo(o.x2 - b * Math.cos(a - 0.45), o.y2 - b * Math.sin(a - 0.45));
+      ctx.lineTo(o.x2, o.y2);
+      ctx.lineTo(o.x2 - b * Math.cos(a + 0.45), o.y2 - b * Math.sin(a + 0.45));
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+function kagitCiz(ctx, ust, alt, genislik, tur) {
+  if (tur === 'duz') return;
+  ctx.save();
+  ctx.strokeStyle = ctx.fillStyle = css('--kagit-cizgi'); ctx.lineWidth = 1;
+  if (tur === 'noktali') {
+    for (let y = Math.ceil(ust / 24) * 24; y <= alt; y += 24)
+      for (let x = 24; x < genislik; x += 24) ctx.fillRect(x - 1, y - 1, 2, 2);
+  } else {
+    const adim = tur === 'cizgili' ? 34 : 24;
+    ctx.beginPath();
+    for (let y = Math.max(adim, Math.ceil(ust / adim) * adim); y <= alt; y += adim) { ctx.moveTo(0, y + .5); ctx.lineTo(genislik, y + .5); }
+    if (tur === 'kareli') for (let x = adim; x < genislik; x += adim) { ctx.moveTo(x + .5, ust); ctx.lineTo(x + .5, alt); }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+let cizimBekliyor = false;
+function ciz() { if (!cizimBekliyor) { cizimBekliyor = true; requestAnimationFrame(simdiCiz); } }
+function simdiCiz() {
+  cizimBekliyor = false;
+  const ust = kaydir.scrollTop, alt = ust + yuk;
+  tctx.setTransform(1, 0, 0, 1, 0, 0);
+  tctx.clearRect(0, 0, taban.width, taban.height);
+  tctx.setTransform(dpr, 0, 0, dpr, 0, -ust * dpr);
+  kagitCiz(tctx, ust, alt, gen, kagit);
+  for (const o of ogeler) { const k = kutu(o); if (k[3] >= ust && k[1] <= alt) ogeCiz(tctx, o); }
+  canliCiz();
+}
+let canliOge = null, silgiNokta = null;
+function canliCiz() {
+  cctx.setTransform(1, 0, 0, 1, 0, 0);
+  cctx.clearRect(0, 0, canli.width, canli.height);
+  cctx.setTransform(dpr, 0, 0, dpr, 0, -kaydir.scrollTop * dpr);
+  if (canliOge) ogeCiz(cctx, canliOge);
+  if (silgiNokta) {
+    cctx.strokeStyle = css('--yazi-soluk'); cctx.lineWidth = 1.5;
+    cctx.beginPath(); cctx.arc(silgiNokta[0], silgiNokta[1], silgiNokta[2], 0, Math.PI * 2); cctx.stroke();
+  }
+}
+
+/* ------------------------------------------------------------------ boyut: sayfa asagi dogru uzar */
+function boyutla() {
+  gen = kaydir.clientWidth; yuk = kaydir.clientHeight; dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  for (const c of [taban, canli]) {
+    c.width = Math.round(gen * dpr); c.height = Math.round(yuk * dpr);
+    c.style.width = gen + 'px'; c.style.height = yuk + 'px';
+  }
+  boyuGuncelle(); simdiCiz();
+}
+function icerikAlti() { let m = 0; for (const o of ogeler) m = Math.max(m, kutu(o)[3]); return m; }
+function boyuGuncelle(enAz = 0, kisalt = false) {
+  const hedef = Math.max(yuk * 2, icerikAlti() + yuk * 1.5, enAz + yuk * 1.5);
+  if (hedef > belgeBoyu || kisalt) { belgeBoyu = hedef; uzunluk.style.height = belgeBoyu + 'px'; }
+}
+
+/* ------------------------------------------------------------------ gecmis + kayit */
+function yap(islem) { geriYigin.push(islem); ileriYigin = []; degisti(); }
+function geriAl() {
+  const i = geriYigin.pop(); if (!i) return;
+  if (i.a === 'ekle') ogeler.splice(ogeler.indexOf(i.o), 1);
+  else if (i.a === 'sil') for (let j = i.liste.length - 1; j >= 0; j--) ogeler.splice(i.liste[j][0], 0, i.liste[j][1]);
+  else if (i.a === 'temizle') ogeler = i.liste.slice();
+  else if (i.a === 'anlik') ogeler = i.once.slice();
+  ileriYigin.push(i); degisti();
+}
+function yinele() {
+  const i = ileriYigin.pop(); if (!i) return;
+  if (i.a === 'ekle') ogeler.push(i.o);
+  else if (i.a === 'sil') for (const [, o] of i.liste) ogeler.splice(ogeler.indexOf(o), 1);
+  else if (i.a === 'temizle') ogeler = [];
+  else if (i.a === 'anlik') ogeler = i.sonra.slice();
+  geriYigin.push(i); degisti();
+}
+let kayitZamanlayici = 0;
+function degisti() {
+  $('#geri').disabled = !geriYigin.length; $('#ileri').disabled = !ileriYigin.length;
+  boyuGuncelle(); ciz();
+  clearTimeout(kayitZamanlayici); kayitZamanlayici = setTimeout(kaydet, 400);
+}
+const iso = ms => ms ? new Date(ms).toISOString() : null;
+function veri() {
+  if (yigin.length) yigin[yigin.length - 1].oge.ic.ogeler = ogeler;     // acik ic defteri yerine yaz
+  return { surum: 1, ders: dersAd, kagit, kagitRenk, dersBaslangic: iso(dersBas), dersBitis: iso(dersBit),
+           kaydedildi: new Date().toISOString(), ogeler: yigin.length ? yigin[0].ogeler : ogeler };
+}
+function kaydet() {
+  try { localStorage.setItem(ANAHTAR, JSON.stringify(veri())); if (!mesajVar) durumYaz('Kaydedildi'); }
+  catch (e) { durumYaz('Kaydedilemedi'); }
+}
+function yukleVeri(v) {
+  if (!v || !Array.isArray(v.ogeler)) throw new Error('Geçersiz dosya');
+  const temiz = l => l.filter(o => {
+    if (!o || !['yol', 'metin', 'cizgi', 'ok', 'kutu', 'elips', 'defter'].includes(o.k)) return false;
+    if (o.k === 'defter') o.ic = { ogeler: temiz(o.ic && Array.isArray(o.ic.ogeler) ? o.ic.ogeler : []) };
+    return true;
+  });
+  ogeler = temiz(v.ogeler); yigin = [];
+  dersAd = $('#ders').value = v.ders || ''; baglamGuncelle(); kagitSec(v.kagit || 'cizgili'); kagitRenkSec(v.kagitRenk || 'varsayilan');
+  dersBas = v.dersBaslangic ? Date.parse(v.dersBaslangic) : null; dersBit = v.dersBitis ? Date.parse(v.dersBitis) : null;
+  dersYaz();
+  geriYigin = []; ileriYigin = []; belgeBoyu = 0;
+}
+let durumZ = 0, mesajVar = false;
+function durumYaz(m, ms = 1500) { $('#durum').textContent = m; mesajVar = true; clearTimeout(durumZ); durumZ = setTimeout(saatYaz, ms); }
+const saatMetni = () => new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+function saatYaz() { mesajVar = false; $('#durum').textContent = saatMetni(); }
+
+/* ------------------------------------------------------------------ girdi */
+const nokta = e => { const r = canli.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top + kaydir.scrollTop]; };
+let aktif = null;   // { id, mod, ... }
+let silinen = null, silOnce = null, silDegisti = false;
+
+canli.addEventListener('pointerdown', e => {
+  if (aktif || (e.pointerType === 'mouse' && e.button !== 0)) return;
+  metniBitir();
+  const [x, y] = nokta(e);
+  if (e.pointerType === 'touch' && !parmakCiz) {       // parmak = kaydirma
+    cancelAnimationFrame(atalet);
+    aktif = { id: e.pointerId, mod: 'kaydir', sonY: e.clientY, hiz: 0, t: performance.now(), basX: e.clientX, basY: e.clientY, defter: defterBul(x, y) };
+    canli.setPointerCapture(e.pointerId); return;
+  }
+  const acilacak = SILGILER.includes(arac) ? null : defterBul(x, y);   // not defteri simgesine tiklandi
+  if (acilacak) {
+    aktif = { id: e.pointerId, mod: 'ac', defter: acilacak, basX: e.clientX, basY: e.clientY };
+    canli.setPointerCapture(e.pointerId); return;
+  }
+  if (!(dersBas && !dersBit)) {                       // ders baslamadan yazi/cizim yok
+    durumYaz('Önce dersi başlatın');
+    const b = $('#ders-dugme'); b.classList.remove('dikkat'); void b.offsetWidth; b.classList.add('dikkat');
+    return;
+  }
+  const kalemSilgi = e.pointerType === 'pen' && (e.buttons & 32 || e.button === 5);
+  const a = kalemSilgi ? 'nokta' : arac, s = ayar[a];
+  canli.setPointerCapture(e.pointerId);
+  aktif = { id: e.pointerId, mod: a, x0: x, y0: y };
+  if (a === 'kalem' || a === 'fosfor') {
+    const basincli = a === 'kalem' && e.pointerType === 'pen' && e.pressure > 0 && e.pressure !== 0.5;
+    canliOge = { k: 'yol', renk: s.renk, w: s.w, n: [x, y, e.pressure || 0.5], t: Date.now() };
+    if (a === 'fosfor') canliOge.fosfor = 1;
+    if (basincli) canliOge.basinc = 1;
+  } else if (a === 'silgi') {
+    silinen = []; silgiNokta = [x, y, s.w]; sil(x, y);
+  } else if (a === 'nokta') {
+    silOnce = ogeler.slice(); silDegisti = false; silgiNokta = [x, y, s.w]; noktaSil(x, y);
+  } else if (['cizgi', 'ok', 'kutu', 'elips'].includes(a)) {
+    canliOge = { k: a, renk: s.renk, w: s.w, x1: x, y1: y, x2: x, y2: y, t: Date.now() };
+  }
+  canliCiz(); e.preventDefault();
+});
+canli.addEventListener('pointermove', e => {
+  if (!aktif || e.pointerId !== aktif.id) return;
+  if (aktif.mod === 'kaydir') {
+    const simdi = performance.now(), dy = e.clientY - aktif.sonY;
+    kaydir.scrollTop -= dy;
+    aktif.hiz = 0.7 * aktif.hiz + 0.3 * (dy / Math.max(1, simdi - aktif.t));
+    aktif.sonY = e.clientY; aktif.t = simdi; return;
+  }
+  const olaylar = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+  for (const o of (olaylar.length ? olaylar : [e])) {
+    const [x, y] = nokta(o);
+    if (canliOge && canliOge.k === 'yol') {
+      const n = canliOge.n, l = n.length;
+      if (Math.hypot(x - n[l - 3], y - n[l - 2]) >= 0.7) n.push(x, y, o.pressure || 0.5);
+    } else if (canliOge) { canliOge.x2 = x; canliOge.y2 = y; }
+    else if (aktif.mod === 'silgi') { silgiNokta = [x, y, ayar.silgi.w]; sil(x, y); }
+    else if (aktif.mod === 'nokta') {       // hizli harekette bosluk kalmasin diye ara adimlarla sil
+      const r = ayar.nokta.w, [ex, ey] = silgiNokta, d = Math.hypot(x - ex, y - ey), adim = Math.max(1, Math.ceil(d / (r * 0.5)));
+      for (let j = 1; j <= adim; j++) noktaSil(ex + (x - ex) * j / adim, ey + (y - ey) * j / adim);
+      silgiNokta = [x, y, r];
+    }
+  }
+  const [, y] = nokta(e);
+  if (y > belgeBoyu - yuk * 0.5) boyuGuncelle(y);     // sayfanin sonuna yaklasinca uzat
+  canliCiz();
+});
+function birak(e) {
+  if (!aktif || e.pointerId !== aktif.id) return;
+  const a = aktif; aktif = null;
+  const tik = e.type === 'pointerup' && Math.hypot(e.clientX - a.basX, e.clientY - a.basY) < 10;
+  if (a.mod === 'kaydir') { if (tik && a.defter) defterAc(a.defter); else ataletBaslat(a.hiz); return; }
+  if (a.mod === 'ac') { if (tik) defterAc(a.defter); return; }
+  const [x, y] = nokta(e);
+  if (canliOge) {
+    const o = canliOge; canliOge = null;
+    const sekil = o.k !== 'yol';
+    if (e.type === 'pointerup' && (!sekil || Math.hypot(o.x2 - o.x1, o.y2 - o.y1) > 4)) {
+      o.n && (o.n = o.n.map(v => Math.round(v * 100) / 100));
+      ogeler.push(o); yap({ a: 'ekle', o });
+    }
+  } else if (a.mod === 'silgi') {
+    silgiNokta = null;
+    if (silinen.length) yap({ a: 'sil', liste: silinen });
+    silinen = null;
+  } else if (a.mod === 'nokta') {
+    silgiNokta = null;
+    if (silDegisti) yap({ a: 'anlik', once: silOnce, sonra: ogeler.slice() });
+    silOnce = null;
+  } else if (e.type === 'pointerup' && a.mod === 'metin') {
+    metinAc(x, y);
+  } else if (e.type === 'pointerup' && a.mod === 'defter') {
+    const sira = ogeler.filter(o => o.k === 'defter').length + 1;
+    const o = { k: 'defter', x: x - 23, y: y - 28, ad: 'Not ' + sira, ic: { ogeler: [] }, t: Date.now() };
+    ogeler.push(o); yap({ a: 'ekle', o }); defterAc(o);
+  } else if (e.type === 'pointerup' && a.mod === 'saat') {
+    const o = { k: 'metin', renk: ayar.saat.renk, boyut: 15, x, y: y - 9, metin: '⏱ ' + saatMetni(), t: Date.now(), damga: 1 };
+    ogeler.push(o); yap({ a: 'ekle', o });
+  }
+  canliCiz();
+}
+canli.addEventListener('pointerup', birak);
+canli.addEventListener('pointercancel', birak);
+canli.addEventListener('contextmenu', e => e.preventDefault());
+
+function sil(x, y) {
+  const r = ayar.silgi.w; let oldu = false;
+  for (let i = ogeler.length - 1; i >= 0; i--)
+    if (dokunuyor(ogeler[i], x, y, r)) { silinen.push([i, ogeler[i]]); ogeler.splice(i, 1); oldu = true; }
+  if (oldu) ciz();
+}
+function noktaSil(x, y) {
+  const r = ayar.nokta.w; let oldu = false;
+  for (let i = ogeler.length - 1; i >= 0; i--) {
+    const o = ogeler[i];
+    if (o.k === 'metin' || o.k === 'defter' || !dokunuyor(o, x, y, r)) continue;
+    const kalan = parcala(o, x, y, r);
+    if (kalan) { ogeler.splice(i, 1, ...kalan); oldu = true; }
+  }
+  if (oldu) { silDegisti = true; ciz(); }
+}
+/* ------------------------------------------------------------------ ic not defterleri */
+function defterBul(x, y) {
+  for (let i = ogeler.length - 1; i >= 0; i--) {
+    const o = ogeler[i];
+    if (o.k === 'defter' && x >= o.x - 2 && x <= o.x + 50 && y >= o.y - 2 && y <= o.y + 72) return o;
+  }
+  return null;
+}
+function baglamGuncelle() {
+  const ic = yigin.length, b = $('#geri-don');
+  b.hidden = !ic;
+  if (ic) b.querySelector('span').textContent = ic === 1 ? 'Ana defter' : (yigin[ic - 1].ust || 'Geri');
+  $('#ders').value = ic ? yigin[ic - 1].oge.ad : dersAd;
+  $('#ders').placeholder = ic ? 'Not adı' : 'Ders adı (örn. Matematik 9-A)';
+}
+function defterAc(o) {
+  metniBitir(); onizlemeGizle();
+  yigin.push({ ogeler, geriYigin, ileriYigin, kaydirma: kaydir.scrollTop, oge: o, ust: yigin.length ? yigin[yigin.length - 1].oge.ad : '' });
+  ogeler = o.ic.ogeler; geriYigin = []; ileriYigin = []; belgeBoyu = 0;
+  baglamGuncelle(); degisti(); kaydir.scrollTop = 0; simdiCiz();
+}
+function defterKapat() {
+  const k = yigin.pop(); if (!k) return;
+  metniBitir();
+  k.oge.ic.ogeler = ogeler;
+  ogeler = k.ogeler; geriYigin = k.geriYigin; ileriYigin = k.ileriYigin; belgeBoyu = 0;
+  baglamGuncelle(); degisti(); kaydir.scrollTop = k.kaydirma; simdiCiz();
+}
+$('#geri-don').onclick = defterKapat;
+
+let onizlenen = null;
+function onizlemeGizle() { onizlenen = null; $('#onizleme').hidden = true; document.body.classList.remove('defter-ustu'); }
+function onizlemeGoster(o) {
+  document.body.classList.add('defter-ustu');
+  if (onizlenen === o) return;
+  onizlenen = o;
+  const kutucuk = $('#onizleme'), c = kutucuk.querySelector('canvas'), g = c.getContext('2d'), olcek = 240 / gen;
+  c.width = 240 * dpr; c.height = 170 * dpr;
+  g.setTransform(dpr, 0, 0, dpr, 0, 0); g.fillStyle = css('--kagit'); g.fillRect(0, 0, 240, 170);
+  g.setTransform(dpr * olcek, 0, 0, dpr * olcek, 0, 0);
+  kagitCiz(g, 0, 170 / olcek, gen, kagit);
+  for (const i of o.ic.ogeler) if (kutu(i)[1] <= 170 / olcek) ogeCiz(g, i);
+  const n = o.ic.ogeler.length, alt = kutucuk.querySelector('div'), ad = document.createElement('b');
+  ad.textContent = o.ad || 'Not'; alt.textContent = ''; alt.append(ad, n ? ' · açmak için tıklayın' : ' · boş');
+  kutucuk.hidden = false;
+  const sol = o.x + 60, ust = o.y - kaydir.scrollTop;
+  kutucuk.style.left = Math.max(8, sol + 262 > gen ? o.x - 270 : sol) + 'px';
+  kutucuk.style.top = Math.max(8, Math.min(ust, yuk - 215)) + 'px';
+}
+canli.addEventListener('pointermove', e => {      // uzerine gelince on gosterim (fare / kalem)
+  if (aktif || e.pointerType === 'touch') return;
+  const [x, y] = nokta(e), o = SILGILER.includes(arac) ? null : defterBul(x, y);
+  o ? onizlemeGoster(o) : onizlemeGizle();
+});
+canli.addEventListener('pointerleave', onizlemeGizle);
+
+let atalet = 0;
+function ataletBaslat(hiz) {          // parmakla kaydirmada yumusak durma
+  let v = hiz, son = performance.now();
+  const adim = simdi => {
+    const dt = simdi - son; son = simdi;
+    kaydir.scrollTop -= v * dt; v *= Math.pow(0.995, dt);
+    if (Math.abs(v) > 0.02) atalet = requestAnimationFrame(adim);
+  };
+  if (Math.abs(v) > 0.05) atalet = requestAnimationFrame(adim);
+}
+kaydir.addEventListener('scroll', () => {
+  if (onizlenen) onizlemeGizle();
+  if (kaydir.scrollTop + yuk > belgeBoyu - yuk * 0.5) boyuGuncelle(kaydir.scrollTop + yuk);
+  ciz();
+}, { passive: true });
+
+/* ------------------------------------------------------------------ metin kutusu */
+let kutucuk = null;
+function metinAc(x, y) {
+  const s = ayar.metin, boyut = 12 + s.w * 2;
+  const t = document.createElement('textarea');
+  t.rows = 1; t.spellcheck = false;
+  t.style.cssText = `left:${x - 5}px; top:${y - boyut * 0.75}px; font-size:${boyut}px; color:${renkCoz(s.renk)}; width:${Math.max(140, Math.min(420, gen - x - 12))}px`;
+  t._bilgi = { x, y: y - boyut * 0.75 + 3, boyut, renk: s.renk };
+  t.addEventListener('input', () => { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; });
+  t.addEventListener('keydown', e => {
+    if (e.key === 'Escape' || (e.key === 'Enter' && (e.ctrlKey || e.metaKey))) { e.preventDefault(); metniBitir(); }
+    e.stopPropagation();
+  });
+  t.addEventListener('blur', () => setTimeout(metniBitir, 0));
+  uzunluk.appendChild(t); kutucuk = t;
+  setTimeout(() => t.focus(), 0);
+}
+function metniBitir() {
+  const t = kutucuk; if (!t) return;
+  kutucuk = null;
+  const metin = t.value.replace(/\s+$/, '');
+  if (metin) { const o = { k: 'metin', ...t._bilgi, metin, t: Date.now() }; ogeler.push(o); yap({ a: 'ekle', o }); }
+  t.remove();
+}
+
+/* ------------------------------------------------------------------ panel */
+// kalinlik 1-100 olcegi: 100 = kalemde 24 px, fosfor ve silgilerde 40 px
+const enKalin = a => a === 'fosfor' || SILGILER.includes(a) ? 40 : 24;
+function aracSec(a) {
+  metniBitir();
+  arac = a; document.body.dataset.arac = a;
+  document.querySelectorAll('.arac').forEach(b => b.setAttribute('aria-pressed', b.dataset.arac === a));
+  const s = ayar[a];
+  $('#kalinlik').value = $('#kalinlik-deger').value = Math.max(1, Math.round(s.w / enKalin(a) * 100));
+  $('#kalinlik').disabled = a === 'saat' || a === 'defter';
+  document.querySelectorAll('#renkler .renk').forEach(b => b.setAttribute('aria-pressed', b.dataset.renk === s.renk));
+  $('#renkler').style.opacity = SILGILER.includes(a) ? .35 : 1;
+  onizle();
+}
+function onizle() {
+  const s = ayar[arac], i = $('#onizle i'), b = Math.min(30, SILGILER.includes(arac) ? s.w * 1.2 : s.w);
+  i.style.width = i.style.height = Math.max(2, b) + 'px';
+  i.style.background = s.renk ? renkCoz(s.renk) : 'transparent';
+  i.style.border = s.renk ? 'none' : '1.5px solid ' + css('--yazi-soluk');
+  i.style.opacity = arac === 'fosfor' ? .45 : 1;
+}
+function renkSec(r) {
+  if (SILGILER.includes(arac)) return;
+  ayar[arac].renk = r;
+  document.querySelectorAll('#renkler .renk').forEach(b => b.setAttribute('aria-pressed', b.dataset.renk === r));
+  onizle();
+}
+function kagitSec(k) {
+  kagit = k;
+  document.querySelectorAll('#kagitlar button').forEach(b => b.setAttribute('aria-pressed', b.dataset.kagit === k));
+  ciz();
+}
+function parlaklik(hex) {
+  const v = parseInt(hex.slice(1), 16);
+  return (0.299 * (v >> 16 & 255) + 0.587 * (v >> 8 & 255) + 0.114 * (v & 255)) / 255;
+}
+function kagitRenkSec(r) {   // arka plan rengi; murekkep ve cizgi rengi kagida gore uyarlanir
+  kagitRenk = /^#[0-9a-f]{6}$/i.test(r) ? r : 'varsayilan';
+  const st = document.documentElement.style;
+  if (kagitRenk === 'varsayilan') ['--kagit', '--murekkep', '--kagit-cizgi'].forEach(a => st.removeProperty(a));
+  else {
+    const acik = parlaklik(kagitRenk) > 0.5;
+    st.setProperty('--kagit', kagitRenk);
+    st.setProperty('--murekkep', acik ? '#1b1b1a' : '#f2f1ec');
+    st.setProperty('--kagit-cizgi', acik ? 'rgba(30,50,90,.17)' : 'rgba(255,255,255,.17)');
+  }
+  document.querySelectorAll('#kagit-renkler .renk').forEach(b => b.setAttribute('aria-pressed', b.dataset.renk === kagitRenk));
+  ciz(); onizle();
+}
+function ozelRenk(hedef, ad, sec) {
+  const sar = document.createElement('label'), giris = document.createElement('input');
+  sar.className = 'renk ozel-sar'; sar.title = ad;
+  giris.type = 'color'; giris.setAttribute('aria-label', ad);
+  giris.oninput = () => sec(giris.value); sar.appendChild(giris); hedef.appendChild(sar);
+}
+for (const [r, ad] of KAGIT_RENKLERI) {
+  const b = document.createElement('button');
+  b.className = 'renk' + (r === 'varsayilan' ? ' oto' : ''); b.dataset.renk = r; b.title = ad; b.setAttribute('aria-label', 'Arka plan: ' + ad);
+  if (r !== 'varsayilan') b.style.background = r;
+  b.onclick = () => { kagitRenkSec(r); degisti(); };
+  $('#kagit-renkler').appendChild(b);
+}
+ozelRenk($('#kagit-renkler'), 'Başka arka plan rengi', r => { kagitRenkSec(r); degisti(); });
+for (const [r, ad] of RENKLER) {
+  const b = document.createElement('button');
+  b.className = 'renk'; b.dataset.renk = r; b.title = ad; b.setAttribute('aria-label', ad);
+  b.style.background = r === 'murekkep' ? 'var(--murekkep)' : r;
+  b.onclick = () => renkSec(r);
+  $('#renkler').appendChild(b);
+}
+ozelRenk($('#renkler'), 'Başka renk', renkSec);
+$('#araclar').addEventListener('click', e => { const b = e.target.closest('.arac'); if (b) aracSec(b.dataset.arac); });
+$('#kagitlar').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { kagitSec(b.dataset.kagit); degisti(); } });
+$('#kalinlik').addEventListener('input', e => { ayar[arac].w = Math.max(0.5, enKalin(arac) * e.target.value / 100); $('#kalinlik-deger').value = e.target.value; onizle(); });
+$('#parmak').addEventListener('change', e => { parmakCiz = e.target.checked; });
+$('#geri').onclick = geriAl; $('#ileri').onclick = yinele;
+$('#kulak').onclick = () => {
+  const kapali = document.body.classList.toggle('panel-kapali');
+  $('#kulak').setAttribute('aria-expanded', !kapali);
+  try { localStorage.setItem(ANAHTAR + '-panel', kapali ? '0' : '1'); } catch (e) {}
+};
+$('#ders').addEventListener('input', e => {
+  if (yigin.length) { yigin[yigin.length - 1].oge.ad = e.target.value; } else dersAd = e.target.value;
+  clearTimeout(kayitZamanlayici); kayitZamanlayici = setTimeout(kaydet, 400); });
+
+// "Tumunu temizle": iki adimli onay (tarayici diyalogu kullanmadan)
+let temizleZ = 0;
+$('#temizle').onclick = e => {
+  const b = e.currentTarget;
+  if (b.dataset.onay) {
+    clearTimeout(temizleZ); delete b.dataset.onay; b.textContent = 'Tümünü temizle';
+    if (ogeler.length) { const liste = ogeler.slice(); ogeler = []; yap({ a: 'temizle', liste }); boyuGuncelle(0, true); kaydir.scrollTop = 0; }
+  } else {
+    b.dataset.onay = 1; b.textContent = 'Emin misiniz? Tekrar dokunun';
+    temizleZ = setTimeout(() => { delete b.dataset.onay; b.textContent = 'Tümünü temizle'; }, 3000);
+  }
+};
+
+/* ------------------------------------------------------------------ disa / ice aktarma */
+function dosyaAdi(uzanti) {
+  const ad = ($('#ders').value || 'ders-defteri').trim().toLowerCase()
+    .replace(/[çğıöşü]/g, c => ({ ç: 'c', ğ: 'g', ı: 'i', ö: 'o', ş: 's', ü: 'u' }[c]))
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'ders-defteri';
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  return `${ad}_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.${uzanti}`;
+}
+function indir(blob, ad) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = ad; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+function pngTuval() {
+  const boy = Math.max(200, icerikAlti() + 40), olcek = Math.min(2, 16000 / boy);
+  const c = document.createElement('canvas');
+  c.width = Math.round(gen * olcek); c.height = Math.round(boy * olcek);
+  const x = c.getContext('2d');
+  x.fillStyle = css('--kagit'); x.fillRect(0, 0, c.width, c.height);
+  x.setTransform(olcek, 0, 0, olcek, 0, 0);
+  kagitCiz(x, 0, boy, gen, kagit);
+  for (const o of ogeler) ogeCiz(x, o);
+  return c;
+}
+$('#png').onclick = () => pngTuval().toBlob(b => indir(b, dosyaAdi('png')), 'image/png');
+$('#json').onclick = () => indir(new Blob([JSON.stringify(veri())], { type: 'application/json' }), dosyaAdi('json'));
+$('#yukle').onclick = () => $('#dosya').click();
+$('#dosya').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try { yukleVeri(JSON.parse(await f.text())); degisti(); kaydir.scrollTop = 0; durumYaz('Açıldı'); }
+  catch (err) { durumYaz('Dosya okunamadı'); }
+};
+
+/* ------------------------------------------------------------------ geri sayim */
+let sayacToplam = 300, sayacKalan = 300, sayacZ = 0;
+const sayacYaz = () => { $('#sayac').textContent = String(Math.floor(sayacKalan / 60)).padStart(2, '0') + ':' + String(sayacKalan % 60).padStart(2, '0'); };
+function sayacDur() { clearInterval(sayacZ); sayacZ = 0; $('#sayac-baslat').textContent = 'Başlat'; }
+$('#sayac-baslat').onclick = () => {
+  if (sayacZ) return sayacDur();
+  if (sayacKalan <= 0) sayacKalan = sayacToplam;
+  const bitis = Date.now() + sayacKalan * 1000;
+  $('#sayac-baslat').textContent = 'Duraklat';
+  sayacZ = setInterval(() => {
+    sayacKalan = Math.max(0, Math.round((bitis - Date.now()) / 1000)); sayacYaz();
+    if (sayacKalan === 0) { sayacDur(); sureBitti(); }
+  }, 250);
+};
+$('#sayac-sifirla').onclick = () => { sayacDur(); sayacKalan = sayacToplam; sayacYaz(); };
+document.querySelectorAll('[data-dk]').forEach(b => b.onclick = () => { sayacDur(); sayacToplam = sayacKalan = b.dataset.dk * 60; sayacYaz(); });
+function sureBitti() {
+  durumYaz('Süre doldu');
+  const u = $('#ust'); u.classList.remove('sure-bitti'); void u.offsetWidth; u.classList.add('sure-bitti');
+  try {
+    const ac = new (window.AudioContext || window.webkitAudioContext)(), o = ac.createOscillator(), g = ac.createGain();
+    o.frequency.value = 880; g.gain.setValueAtTime(0.15, ac.currentTime); g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.8);
+    o.connect(g).connect(ac.destination); o.start(); o.stop(ac.currentTime + 0.8);
+  } catch (e) {}
+}
+
+/* ------------------------------------------------------------------ ders sayaci */
+let dersZ = 0;
+function sureMetni(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000)), p = n => String(n).padStart(2, '0');
+  return (s >= 3600 ? Math.floor(s / 3600) + ':' : '') + p(Math.floor(s / 60) % 60) + ':' + p(s % 60);
+}
+function dersYaz() {
+  const el = $('#ders-sure'), b = $('#ders-dugme'), suruyor = dersBas && !dersBit;
+  el.hidden = !dersBas;
+  if (dersBas) el.textContent = sureMetni((dersBit || Date.now()) - dersBas);
+  b.textContent = suruyor ? 'Dersi bitir' : 'Dersi başlat';
+  b.classList.toggle('calisiyor', !!suruyor);
+  document.body.classList.toggle('kilitli', !suruyor);
+  $('#kilit').innerHTML = dersBit ? "Ders bitti. Yazmaya devam etmek için yeniden <b>Dersi başlat</b>'a basın."
+                                  : "Yazmak ve çizmek için önce <b>Dersi başlat</b>'a basın.";
+  clearInterval(dersZ); dersZ = 0;
+  if (suruyor) dersZ = setInterval(() => { el.textContent = sureMetni(Date.now() - dersBas); }, 500);
+}
+$('#ders-dugme').onclick = () => {
+  if (dersBas && !dersBit) { dersBit = Date.now(); durumYaz('Ders bitti'); }
+  else {
+    dersBas = Date.now(); dersBit = null; durumYaz('Ders başladı');
+    let gosterme = false;
+    try { gosterme = localStorage.getItem(ANAHTAR + '-ogretici') === 'kapali'; } catch (e) {}
+    if (!gosterme) ogreticiAc();
+  }
+  dersYaz(); kaydet();
+};
+
+/* ------------------------------------------------------------------ ogretici */
+const ADIMLAR = [   // [secici(ler), baslik, aciklama, panelde mi]
+  ['#ders', 'Ders adı', 'Dersin adını buraya yazın. İndirdiğiniz dosyalar bu adla kaydedilir.', 0],
+  ['#ders-sure, #ders-dugme', 'Ders sayacı', 'Dersi başlattığınız anda sayaç çalışmaya başlar ve geçen süreyi gösterir. Ders başlamadan deftere yazılamaz. Ders bitince “Dersi bitir”e basın.', 0],
+  ['#geri, #ileri', 'Geri al ve yinele', 'Son yaptığınızı geri alır ya da geri aldığınızı tekrar uygular. Silinenler de geri gelir.', 0],
+  ['#kulak', 'Araç paneli', 'Bu kulakçık paneli açıp kapatır. Kapalıyken sayfanın tamamı yazmaya kalır.', 1],
+  ['.arac[data-arac="kalem"]', 'Kalem', 'Serbest yazı ve çizim. Ekran kalemiyle bastırdıkça çizgi kalınlaşır.', 1],
+  ['.arac[data-arac="fosfor"]', 'Fosforlu kalem', 'Yazının üstünden geçerek yarı saydam renkle vurgular.', 1],
+  ['.arac[data-arac="nokta"]', 'Silgi', 'Normal silgi: yalnızca üzerinden geçtiğiniz kısmı siler, çizginin geri kalanı yerinde kalır.', 1],
+  ['.arac[data-arac="silgi"]', 'Çizgi sil', 'Dokunduğu çizgiyi, şekli ya da metni tek seferde bütün olarak siler.', 1],
+  ['.arac[data-arac="metin"]', 'Metin', 'Sayfada bir yere dokunun ve klavyeyle yazın. Boş bir yere dokununca metin yerleşir.', 1],
+  ['.arac[data-arac="cizgi"], .arac[data-arac="ok"], .arac[data-arac="kutu"], .arac[data-arac="elips"]', 'Şekiller', 'Düz çizgi, ok, kutu ve elips. Başlangıç noktasına basıp sürükleyin.', 1],
+  ['.arac[data-arac="saat"]', 'Saat damgası', 'Dokunduğunuz yere o anki saati yazar; konuya ne zaman geçtiğinizi işaretlemek için.', 1],
+  ['.arac[data-arac="defter"]', 'Not defteri', 'Dokunduğunuz yere ayrı bir not defteri koyar ve hemen açar. Sol üstteki geri düğmesi ana deftere döndürür. Simgenin üzerine gelince ön gösterim çıkar, tıklayınca açılır.', 1],
+  ['#renkler', 'Renk', 'Seçili aracın rengi. Her araç kendi rengini hatırlar; sondaki renkli daire başka bir renk seçtirir.', 1],
+  ['#kalinlik, #kalinlik-deger, #onizle', 'Kalınlık', 'Kalemin, fosforun ya da silginin kalınlığı, 1 ile 100 arasında. Sayı seçili değeri, sağdaki nokta sonucu gösterir.', 1],
+  ['#kagitlar, #kagit-renkler', 'Kâğıt ve arka plan', 'Üstte kâğıt deseni (düz, çizgili, kareli, noktalı), altta arka plan rengi. Koyu zeminde mürekkep kendiliğinden açılır.', 1],
+  ['label.anahtar', 'Parmakla çiz', 'Kapalıyken parmak sayfayı kaydırır, kalem çizer. Ekran kaleminiz yoksa bunu açın.', 1],
+  ['#sayac, #sayac-baslat, #sayac-sifirla, [data-dk="1"], [data-dk="10"]', 'Geri sayım', 'Etkinlik ya da soru çözümü için süre tutar. Süre dolunca üst çubuk yanıp söner ve kısa bir ses çalar.', 1],
+  ['#png, #json, #yukle', 'Kaydet ve aç', 'PNG, defterin tamamını resim olarak indirir. JSON, sonradan yeniden açılabilen ve yazım saatlerini içeren dosyadır.', 1],
+  ['#ogretici-ac, #temizle', 'Öğretici ve temizleme', 'Bu öğreticiyi istediğiniz zaman buradan yeniden açabilirsiniz. “Tümünü temizle” iki kez dokununca defteri boşaltır.', 1],
+];
+let ogSira = 0, ogPanelKapaliydi = false, ogZ = 0;
+function ogreticiAc() {
+  metniBitir();
+  ogPanelKapaliydi = document.body.classList.contains('panel-kapali');
+  ogSira = 0; $('#ogretici').hidden = false; ogGoster();
+}
+function ogreticiKapat(birDaha = true) {
+  $('#ogretici').hidden = true; clearTimeout(ogZ);
+  document.body.classList.toggle('panel-kapali', ogPanelKapaliydi);
+  if (!birDaha) { try { localStorage.setItem(ANAHTAR + '-ogretici', 'kapali'); } catch (e) {} durumYaz('Öğretici kapatıldı'); }
+}
+function ogAdim(yon) {
+  if (ogSira + yon < 0) return;
+  if (ogSira + yon >= ADIMLAR.length) return ogreticiKapat();
+  ogSira += yon; ogGoster();
+}
+function ogGoster() {
+  const [secici, baslik, metin, panelde] = ADIMLAR[ogSira];
+  $('#kart-sira').textContent = `${ogSira + 1} / ${ADIMLAR.length}`;
+  $('#kart-baslik').textContent = baslik; $('#kart-metin').textContent = metin;
+  $('#og-geri').disabled = ogSira === 0;
+  $('#og-ileri').textContent = ogSira === ADIMLAR.length - 1 ? 'Bitir' : 'İleri';
+  let bekle = 0;
+  if (panelde && document.body.classList.contains('panel-kapali')) { document.body.classList.remove('panel-kapali'); bekle = 260; }
+  const ilk = document.querySelector(secici.split(',')[0]);
+  if (panelde && ilk.closest('#panel-ic')) ilk.scrollIntoView({ block: 'center' });
+  clearTimeout(ogZ); ogZ = setTimeout(ogYerlestir, bekle);
+  $('#og-ileri').focus({ preventScroll: true });
+}
+function ogYerlestir() {
+  if ($('#ogretici').hidden) return;
+  let x1 = 1e9, y1 = 1e9, x2 = -1e9, y2 = -1e9;
+  for (const el of document.querySelectorAll(ADIMLAR[ogSira][0])) {
+    const r = el.getBoundingClientRect(); if (!r.width && !r.height) continue;
+    x1 = Math.min(x1, r.left); y1 = Math.min(y1, r.top); x2 = Math.max(x2, r.right); y2 = Math.max(y2, r.bottom);
+  }
+  const b = 6, isik = $('#isik'), kart = $('#kart'), vw = innerWidth, vh = innerHeight;
+  x1 -= b; y1 -= b; x2 += b; y2 += b;
+  isik.style.cssText = `left:${x1}px; top:${y1}px; width:${x2 - x1}px; height:${y2 - y1}px`;
+  const kw = kart.offsetWidth, kh = kart.offsetHeight, ara = 14;
+  let sol, ust;
+  if (x1 - kw - ara >= 12 && x1 > vw / 2) { sol = x1 - kw - ara; ust = y1; }            // hedefin soluna
+  else if (y2 + ara + kh <= vh - 12) { sol = x1; ust = y2 + ara; }                      // altina
+  else if (y1 - ara - kh >= 12) { sol = x1; ust = y1 - ara - kh; }                      // ustune
+  else { sol = (vw - kw) / 2; ust = vh - kh - 12; }
+  kart.style.left = Math.max(12, Math.min(sol, vw - kw - 12)) + 'px';
+  kart.style.top = Math.max(12, Math.min(ust, vh - kh - 12)) + 'px';
+}
+$('#og-ileri').onclick = () => ogAdim(1);
+$('#og-geri').onclick = () => ogAdim(-1);
+$('#og-atla').onclick = () => ogreticiKapat();
+$('#og-asla').onclick = () => ogreticiKapat(false);
+$('#ogretici-ac').onclick = ogreticiAc;
+addEventListener('resize', () => setTimeout(ogYerlestir, 50));
+
+/* ------------------------------------------------------------------ klavye */
+document.addEventListener('keydown', e => {
+  if (!$('#ogretici').hidden) {
+    if (e.key === 'Escape') ogreticiKapat(); else if (e.key === 'ArrowRight' || e.key === 'Enter') ogAdim(1); else if (e.key === 'ArrowLeft') ogAdim(-1);
+    e.preventDefault(); return;
+  }
+  if (e.target.matches('input, textarea')) return;
+  const k = e.key.toLowerCase();
+  if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); e.shiftKey ? yinele() : geriAl(); }
+  else if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault(); yinele(); }
+  else if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+    const es = { k: 'kalem', f: 'fosfor', s: 'nokta', d: 'silgi', t: 'metin' }[k];
+    if (es) aracSec(es);
+  }
+});
+
+/* ------------------------------------------------------------------ baslangic */
+try {
+  const kayit = localStorage.getItem(ANAHTAR);
+  if (kayit) yukleVeri(JSON.parse(kayit));
+  if (localStorage.getItem(ANAHTAR + '-panel') === '0') { document.body.classList.add('panel-kapali'); $('#kulak').setAttribute('aria-expanded', 'false'); }
+} catch (e) { ogeler = []; }
+kagitSec(kagit); kagitRenkSec(kagitRenk); aracSec('kalem'); dersYaz(); sayacYaz(); saatYaz(); setInterval(() => { if (!mesajVar) saatYaz(); }, 20000);
+$('#geri').disabled = $('#ileri').disabled = true;
+new ResizeObserver(boyutla).observe(kaydir);
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { ciz(); onizle(); });
+boyutla();
+window.__defter = { get ogeler() { return ogeler; }, veri, png: () => pngTuval().toDataURL('image/png'),
+  // yeni ders: bos sayfa (onceki ders arayuzde arsivlendi)
+  yeniSayfa: () => { metniBitir(); yigin = []; ogeler = []; geriYigin = []; ileriYigin = []; belgeBoyu = 0;
+                     baglamGuncelle(); degisti(); kaydir.scrollTop = 0; simdiCiz(); } };   // diger modullerin okuyabilmesi icin
+})();
+</script>
+
+<!-- ============ Ders Asistani koprusu ============
+     Bu sayfa arayuzun icinde (Streamlit bileseni olarak) acildiginda:
+       - "Dersi baslat"  -> tahtayi bos bir sayfayla acar ve arayuze {olay: "basladi"} gonderir
+       - "Dersi bitir"   -> arayuze tahtanin tamamini (JSON + PNG) gonderir
+     Sayfa tek basina acildiginda bu kisim hicbir sey yapmaz. -->
+<script>
+(() => {
+  'use strict';
+  if (window.parent === window) return;               // tek basina acildi: kopru kapali
+  const gonder = (tip, ek) => window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type: tip }, ek || {}), '*');
+  let yukseklik = 760;
+  window.addEventListener('message', e => {
+    const m = e.data || {};
+    if (m.type === 'streamlit:render') {
+      yukseklik = (m.args && m.args.yukseklik) || yukseklik;
+      gonder('streamlit:setFrameHeight', { height: yukseklik });
+    }
+  });
+  gonder('streamlit:componentReady', { apiVersion: 1 });
+  gonder('streamlit:setFrameHeight', { height: yukseklik });
+
+  const deger = v => gonder('streamlit:setComponentValue', { value: v, dataType: 'json' });
+  const dugme = document.getElementById('ders-dugme');
+  let dersSuruyordu = false;
+  // capture: defterin kendi isleyicisinden ONCE calisir, tiklamadan onceki durumu kaydeder
+  document.addEventListener('click', e => {
+    if (e.target.closest && e.target.closest('#ders-dugme') && window.__defter) {
+      const v = window.__defter.veri();
+      dersSuruyordu = !!(v.dersBaslangic && !v.dersBitis);
+    }
+  }, true);
+  dugme.addEventListener('click', () => {
+    setTimeout(() => {                                  // once defterin kendi isleyicisi durumu guncellesin
+      const d = window.__defter; if (!d) return;
+      const v = d.veri();
+      if (v.dersBaslangic && !v.dersBitis) {
+        if (!dersSuruyordu && d.yeniSayfa) d.yeniSayfa();   // yeni ders = bos tahta
+        deger({ olay: 'basladi', zaman: Date.now(), ders: v.ders || '' });
+      } else if (v.dersBitis) {
+        let png = null;
+        try { png = d.png(); } catch (e) {}
+        deger({ olay: 'bitti', zaman: Date.now(), ders: v.ders || '', veri: v, png });
+      }
+    }, 50);
+  });
+})();
+</script>
+</body>
+</html>

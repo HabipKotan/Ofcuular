@@ -97,3 +97,74 @@ Tarayıcınızda `http://localhost:8501` adresine giderek demoyu inceleyebilirsi
 ## 🏆 Jüri Demosu Senaryoları
 1. **Garantili Çevrimdışı Simülasyon:** Donanım veya internet bağımlılığı olmadan 11. Sınıf Türev Dersi senaryosunda eşik kaydırıcı ile canlı olarak 318-383 sn (Limit Tanımı) ve 613-647 sn (Çarpım Kuralı) aralıklarının yakalanıp soru kartlarına dönüştürülmesini gösterin.
 2. **Canlı Sınıf / Jüri Modu:** `classroom_focus.py` modülüyle kamerayı açıp jüri masasını eşzamanlı anonim olarak puanlayın ve yüzlerin otomatik bulanıklaştırıldığını gösterin.
+
+---
+
+## 🎙️ Gerçek Ders Modu (ses + görüntü + Gemini entegrasyonu)
+
+Arayüz artık hazır demo verisinin yanında **gerçek bir dersin** çıktılarını da gösterebilir.
+Kenar çubuğundaki **"Veri kaynağı"** seçiminden **"Gerçek ders (son kayıt)"** seçilir; demo modu yedek olarak durur.
+
+### 1. Gemini anahtarı
+`.env.example` dosyasını `.env` adıyla kopyalayın ve anahtarı yazın:
+```
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=buraya_anahtar
+```
+Kurulum: `python -m pip install -r requirements.txt` (google-genai eklendi).
+Anahtar yoksa sistem eskisi gibi mock moda düşer, demo çökmez.
+
+### 2. Ders dosyalarını proje klasörüne koyun (app.py'nin yanına)
+| Dosya | Üreten |
+|---|---|
+| `transkript.json` | `transkript.py` (Whisper) |
+| `notlar.json` | `notlar.py` (Gemini; notlar + odak serisi + öğretmene öneri) |
+| `kayitlar/dikkat_*.csv` | `dikkat_olcer.py` (görüntü işleme) — notlar.json'da odak serisi yoksa buradan okunur |
+
+Başka bir klasör kullanmak için `.env` içine `GERCEK_VERI_KLASORU=...` yazın.
+
+### 3. Çalıştırın
+```
+python -m streamlit run app.py
+```
+Yeni bir ders işlendiğinde kenar çubuğundaki **"🔄 Son kaydı yeniden yükle"** butonuna basın.
+
+### Değişen / eklenen dosyalar
+- `ui/gercek_veri.py` (yeni): gerçek ders dosyalarını Lecture / LectureNotes / FocusSample yapılarına çevirir
+- `ui/pipeline.py`: veri kaynağı (demo / gerçek) desteği
+- `app.py`: veri kaynağı seçimi, yeniden yükleme, öğretmene öneri kutusu
+- `llm/client.py`, `core/config.py`: Gemini desteği (model yoksa yedek modele geçer)
+- `llm/prompts.py`: üçlü tırnak yazım hatası düzeltildi (canlı LLM modunda uygulamayı çökertiyordu)
+
+---
+
+## 🎬 Dersi Başlat / Bitir (canlı kayıt)
+
+Öğretmen Görünümü'nün en üstündeki **"Ders kaydı"** kutusu:
+
+1. (İsteğe bağlı) **Ders konusu** yazın, ör. `Biyoloji: fotosentez, klorofil` — Whisper terimleri daha doğru yazar.
+2. **🔴 Dersi Başlat** → ayrı bir terminal penceresi ve bulanık kamera önizlemesi açılır.
+   Kamera ölçümü ile mikrofon **aynı anda** başlar (ikisi aynı 0. saniyeyi paylaşır).
+3. **⏹ Dersi Bitir** → kayıt durur ve otomatik olarak:
+   ses → metin (Whisper) → notlar + odak eşleştirmesi (Gemini) çalışır. Ham ses dosyası metne çevrilince silinir.
+4. Bitince sayfa kendiliğinden **"Gerçek ders"** moduna geçer ve yeni dersi gösterir.
+
+Kurulum: `pip install -r requirements.txt` (mediapipe, opencv-python, faster-whisper, sounddevice eklendi).
+Elle çalıştırma: `python ders_kaydi.py --konu "Matematik: kesirler"` (kamera penceresinde `q` ile biter).
+
+Yeni dosyalar: `ders_kaydi.py`, `ui/ders_kontrol.py`, `ses_hatti/transkript.py`, `ses_hatti/notlar.py`.
+`sensing/focus/classroom_focus.py` içine yalnızca üç kanca eklendi (başlangıç, durdurma, CSV yolu); ölçüm mantığı değişmedi.
+Kayıt sırasında sorun çıkarsa açılan terminal penceresindeki mesaja bakın; panel de hatayı gösterir.
+
+---
+
+## 🖊️ Tahta Defteri
+
+**"🖊️ Tahta"** sekmesinde dijital tahta defteri açılır (kalem, fosforlu kalem, silgi, şekiller, metin, iç defterler, geri sayım).
+
+- **Tek tuş (varsayılan açık):** Tahtadaki **Dersi başlat** kamera + mikrofon kaydını da başlatır, **Dersi bitir** hepsini bitirir.
+  Tahtaya yazılan ders adı, Whisper'a konu ipucu olarak gider.
+- Her ders **boş bir tahtayla** başlar; ders bitince tahta `tahtalar/` klasörüne o dersin kaydı olarak eklenir (PNG + yazılma saatli JSON). Geçmiş derslerin tahtaları birikir ve listelenir.
+- Öğretmen Görünümü'nde tahta notların altında görünür; **Öğrenci Görünümü'nde** öğretmen notları onayladıktan sonra paylaşılır ve PNG olarak indirilebilir.
+
+Dosyalar: `ui/tahta/index.html` (defterin kendisi; sonuna yalnızca arayüz köprüsü eklendi, tek başına açıldığında köprü devre dışı kalır), `ui/tahta_bileseni.py`.

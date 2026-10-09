@@ -22,8 +22,13 @@ from engine.matcher import TimeSeriesMatcher
 from llm.client import LLMService
 from sensing.focus.simulated import SimulatedFocusSource
 from sensing.speech.simulated import SimulatedSpeechSource
+from ui import gercek_veri
 
 STUDENT_KEYS = ("focus_raw", "focus_smooth", "gaps", "gap_parts", "cards", "llm_chars_sent")
+
+# Veri kaynakları
+KAYNAK_DEMO = "demo"
+KAYNAK_GERCEK = "gercek"
 
 
 # ---------------------------------------------------------------------------
@@ -35,18 +40,27 @@ def get_llm() -> LLMService:
 
 
 @st.cache_data(show_spinner=False)
-def load_lecture() -> Lecture:
+def load_lecture(kaynak: str = KAYNAK_DEMO, imza: str = "") -> Lecture:
+    """imza: gerçek veri dosyaları değişince önbelleği tazelemek için (gercek_veri.veri_imzasi())."""
+    if kaynak == KAYNAK_GERCEK:
+        return gercek_veri.gercek_ders()
     return SimulatedSpeechSource().lecture()
 
 
 @st.cache_data(show_spinner="Ders notları hazırlanıyor…")
-def load_lecture_notes(_lecture: Lecture, lecture_id: str) -> LectureNotes:
+def load_lecture_notes(_lecture: Lecture, lecture_id: str, kaynak: str = KAYNAK_DEMO, imza: str = "") -> LectureNotes:
+    if kaynak == KAYNAK_GERCEK:
+        # Notlar ses hattında (notlar.py, Gemini) zaten üretildi; tekrar LLM'e gitmeye gerek yok
+        return gercek_veri.gercek_notlar()
     return get_llm().generate_lecture_notes(_lecture)
 
 
 def llm_mode_label() -> str:
     llm = get_llm()
-    return "Mock (çevrimdışı demo)" if (llm.config.use_mock or llm.client is None) else f"Claude API · {llm.config.model}"
+    if llm.config.use_mock or llm.client is None:
+        return "Mock (çevrimdışı demo)"
+    ad = {"gemini": "Gemini API", "anthropic": "Claude API"}.get(llm.config.provider, llm.config.provider)
+    return f"{ad} · {llm.active_model or llm.config.model}"
 
 
 # ---------------------------------------------------------------------------
@@ -56,18 +70,27 @@ def student_data_present() -> bool:
     return "focus_raw" in st.session_state
 
 
-def run_student_pipeline(lecture: Lecture, threshold: float, force: bool = False) -> None:
+def run_student_pipeline(lecture: Lecture, threshold: float, force: bool = False,
+                         kaynak: str = KAYNAK_DEMO) -> None:
     """Odak verisini üretir, eşleştirir ve kartları oluşturur. Sonuçlar session_state'e yazılır.
 
     Eşik değiştiğinde yalnızca korelasyon ve (gerekirse) kartlar yeniden hesaplanır;
     aynı aralık için daha önce üretilmiş kart tekrar LLM'e gönderilmez.
+    Ders (veri kaynağı ya da yeni kayıt) değişirse her şey baştan hesaplanır.
     """
     ss = st.session_state
 
+    if ss.get("focus_lecture_id") != lecture.lecture_id:
+        force = True
+
     if force or "focus_raw" not in ss:
-        ss.focus_raw = SimulatedFocusSource(
-            duration=lecture.duration, sample_rate_hz=settings.focus.sample_rate_hz
-        ).collect()
+        if kaynak == KAYNAK_GERCEK:
+            ss.focus_raw = gercek_veri.gercek_odak()
+        else:
+            ss.focus_raw = SimulatedFocusSource(
+                duration=lecture.duration, sample_rate_hz=settings.focus.sample_rate_hz
+            ).collect()
+        ss.focus_lecture_id = lecture.lecture_id
         ss.card_cache = {}
         ss.llm_chars_sent = 0
         ss.pop("threshold_used", None)
@@ -129,7 +152,8 @@ def group_gaps_by_segment(gaps: List[GapWindow]) -> Tuple[List[GapWindow], List[
 def wipe_student_data() -> None:
     """'Verilerimi sil': öğrenciye ait her şeyi oturum belleğinden kaldırır."""
     for k in list(st.session_state.keys()):
-        if k in STUDENT_KEYS or k in ("card_cache", "threshold_used", "card_choice", "chart_sel_seen") or str(k).startswith("quiz_"):
+        if k in STUDENT_KEYS or k in ("card_cache", "threshold_used", "card_choice", "chart_sel_seen",
+                                      "focus_lecture_id") or str(k).startswith("quiz_"):
             del st.session_state[k]
 
 

@@ -39,11 +39,24 @@ class FocusConfig:
     sample_rate_hz: float = _env_float("FOCUS_SAMPLE_RATE", 1.0)
 
 
+def _llm_provider() -> str:
+    """LLM_PROVIDER verilmediyse: GEMINI_API_KEY varsa gemini, yoksa anthropic."""
+    p = (os.getenv("LLM_PROVIDER") or "").strip().lower()
+    if p:
+        return p
+    return "gemini" if os.getenv("GEMINI_API_KEY") else "anthropic"
+
+
+_PROVIDER = _llm_provider()
+_VARSAYILAN_MODEL = {"gemini": "gemini-3.5-flash", "anthropic": "claude-sonnet-5-5"}
+_ANAHTAR_DEGISKENI = {"gemini": "GEMINI_API_KEY", "anthropic": "ANTHROPIC_API_KEY"}
+
+
 @dataclass(frozen=True)
 class LLMConfig:
-    provider: str = os.getenv("LLM_PROVIDER", "anthropic")  # anthropic | mock
-    model: str = os.getenv("LLM_MODEL", "claude-sonnet-5-5")
-    api_key: str | None = os.getenv("ANTHROPIC_API_KEY")
+    provider: str = _PROVIDER  # gemini | anthropic | mock
+    model: str = os.getenv("LLM_MODEL") or _VARSAYILAN_MODEL.get(_PROVIDER, "")
+    api_key: str | None = os.getenv(_ANAHTAR_DEGISKENI.get(_PROVIDER, "ANTHROPIC_API_KEY")) or None
     max_tokens: int = int(os.getenv("LLM_MAX_TOKENS", "2000"))
 
     @property

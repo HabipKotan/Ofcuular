@@ -285,16 +285,70 @@ class MockLLMService:
 
 
 class LLMService:
+    """Gemini ya da Claude ile çalışır; anahtar yoksa / çağrı başarısızsa Mock'a düşer."""
+
+    # Gemini için sırayla denenecek modeller (ilki yoksa ya da kota dolduysa sonraki)
+    GEMINI_YEDEK_MODELLER = ["gemini-3.5-flash", "gemini-2.5-flash"]
+
     def __init__(self):
         self.config = settings.llm
         self.client = None
-        if not self.config.use_mock:
-            try:
+        self.active_model = None
+        if self.config.use_mock:
+            return
+        try:
+            if self.config.provider == "gemini":
+                from google import genai
+                self.client = genai.Client(api_key=self.config.api_key)
+            elif self.config.provider == "anthropic":
                 import anthropic
                 self.client = anthropic.Anthropic(api_key=self.config.api_key)
-            except Exception as e:
-                logger.warning(f"Anthropic client başlatılamadı, mock moda geçiliyor: {e}")
+            else:
+                logger.warning(f"Bilinmeyen LLM_PROVIDER: {self.config.provider}, mock moda geçiliyor.")
+        except Exception as e:
+            logger.warning(f"{self.config.provider} istemcisi başlatılamadı, mock moda geçiliyor: {e}")
+            self.client = None
 
+    # ------------------------------------------------------------------ ortak çağrı
+    def _ask(self, system: str, user: str) -> str:
+        """Modelden ham metin yanıtı döndürür. Hata olursa exception fırlatır."""
+        if self.config.provider == "gemini":
+            from google.genai import types
+            modeller = [self.config.model] + [m for m in self.GEMINI_YEDEK_MODELLER if m != self.config.model]
+            son_hata = None
+            for model in modeller:
+                try:
+                    yanit = self.client.models.generate_content(
+                        model=model,
+                        contents=user,
+                        config=types.GenerateContentConfig(
+                            system_instruction=system,
+                            response_mime_type="application/json",
+                            temperature=0.3,
+                        ),
+                    )
+                    self.active_model = model
+                    return yanit.text
+                except Exception as e:  # model yok / kota doldu -> sıradakini dene
+                    logger.warning(f"Gemini modeli {model} çalışmadı: {e}")
+                    son_hata = e
+            raise RuntimeError(f"Hiçbir Gemini modeli yanıt vermedi: {son_hata}")
+
+        response = self.client.messages.create(
+            model=self.config.model,
+            max_tokens=self.config.max_tokens,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+        )
+        self.active_model = self.config.model
+        return response.content[0].text
+
+    @staticmethod
+    def _json(raw_text: str):
+        json_match = re.search(r"\{.*\}", raw_text, re.DOTALL)
+        return json.loads(json_match.group(0)) if json_match else None
+
+    # ------------------------------------------------------------------ öğrenci kartı
     def generate_recovery_card(self, gap: GapWindow) -> RecoveryCard:
         if self.config.use_mock or not self.client:
             return MockLLMService.generate_recovery_card(gap)
@@ -309,22 +363,18 @@ class LLMService:
         )
 
         try:
-            response = self.client.messages.create(
-                model=self.config.model,
-                max_tokens=self.config.max_tokens,
-                system=RECOVERY_CARD_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": user_content}],
-            )
-            raw_text = response.content[0].text
-            json_match = re.search(r"\{.*\}", raw_text, re.DOTALL)
-            if json_match:
-                data = json.loads(json_match.group(0))
+            data = self._json(self._ask(RECOVERY_CARD_SYSTEM_PROMPT, user_content))
+            if data:
+                # Zaman ve konu bilgisini modelden değil, ölçümden al
+                data.update(topic=gap.topic, gap_start=gap.start_time, gap_end=gap.end_time)
+                data["questions"] = (data.get("questions") or [])[:2]
                 return RecoveryCard.model_validate(data)
             return MockLLMService.generate_recovery_card(gap)
         except Exception as e:
             logger.error(f"LLM çağrısı başarısız oldu, mock fallback kullanılıyor: {e}")
             return MockLLMService.generate_recovery_card(gap)
 
+    # ------------------------------------------------------------------ ders notu
     def generate_lecture_notes(self, lecture: Lecture) -> LectureNotes:
         if self.config.use_mock or not self.client:
             return MockLLMService.generate_lecture_notes(lecture)
@@ -339,16 +389,8 @@ class LLMService:
         )
 
         try:
-            response = self.client.messages.create(
-                model=self.config.model,
-                max_tokens=self.config.max_tokens,
-                system=LECTURE_NOTES_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": user_content}],
-            )
-            raw_text = response.content[0].text
-            json_match = re.search(r"\{.*\}", raw_text, re.DOTALL)
-            if json_match:
-                data = json.loads(json_match.group(0))
+            data = self._json(self._ask(LECTURE_NOTES_SYSTEM_PROMPT, user_content))
+            if data:
                 return LectureNotes.model_validate(data)
             return MockLLMService.generate_lecture_notes(lecture)
         except Exception as e:
