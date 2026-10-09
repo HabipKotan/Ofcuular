@@ -208,3 +208,4 @@ if not PYDANTIC_V2:
         cls.model_validate = classmethod(lambda c, obj: c.parse_obj(obj))
         cls.model_dump = lambda self, **kwargs: self.dict(**kwargs)
         cls.model_dump_json = lambda self, **kwargs: self.json(**kwargs)
+        cls.model_copy = lambda self, update=None, deep=False: self.copy(update=update, deep=deep)

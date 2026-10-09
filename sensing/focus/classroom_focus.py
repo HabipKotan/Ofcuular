@@ -60,14 +60,6 @@ MODEL_DOSYA = Path(__file__).with_name("face_landmarker.task")
 
 NEDEN_ADLARI = {"yana": "yana bakma", "egik": "bas egik", "kapali": "goz kapali / yorgunluk"}
 
-# Ders kaydi entegrasyonu (ders_kaydi.py tarafindan doldurulur; tek basina calisirken None kalir)
-#   BASLANGIC_KANCASI(monotonic_saat): olcum saati sifirlandigi an cagrilir -> mikrofon ayni anda baslar
-#   DURDUR_DOSYASI: bu dosya olusunca dongu 'q'ya basilmis gibi duzgunce biter
-#   CSV_KANCASI(csv_yolu): olcum dosyasinin yolu belli olunca cagrilir
-BASLANGIC_KANCASI = None
-DURDUR_DOSYASI: Path | None = None
-CSV_KANCASI = None
-
 
 # --------------------------------------------------------------------------
 # Tek yuz: aci ve skor hesabi (saf fonksiyonlar)
@@ -369,15 +361,6 @@ def saatlik_ozet(kayitlar: list[tuple[datetime, float]]) -> list[tuple[str, floa
     return [(etiket, round(sum(v) / len(v), 1)) for etiket, v in gruplar.items()]
 
 
-def ogrenci_sayisi(yuz_ortalamalari: list) -> int:
-    """Derste kameranin gordugu kisi sayisi: donemlerdeki ortalama yuz sayisinin ust ucu (%95'lik deger).
-    Tek tuk yanlis algilama sayiyi sisirmez; ogrenciler ara sira donse/egilse de sayi dusmez."""
-    d = sorted(v for v in yuz_ortalamalari if v and v > 0)
-    if not d:
-        return 0
-    return max(1, int(round(d[min(len(d) - 1, math.ceil(0.95 * len(d)) - 1)])))
-
-
 def oturum_ozeti(oturum: Oturum, ders: str) -> dict:
     """Panelin / ses modulunun okuyacagi sayisal ozet."""
     iyi = [k for k in oturum.kayitlar if k.guvenilir]
@@ -402,7 +385,6 @@ def oturum_ozeti(oturum: Oturum, ders: str) -> dict:
         baslangic=oturum.kayitlar[0].baslangic.isoformat(timespec="seconds"),
         bitis=oturum.kayitlar[-1].bitis.isoformat(timespec="seconds"),
         genel_ortalama=round(sum(k.skor for k in iyi) / len(iyi), 1),
-        ogrenci_sayisi=ogrenci_sayisi([k.ortalama_yuz for k in iyi]),
         saate_gore=[{"saat": s, "skor": v} for s, v in satirlar],
         en_dusuk=dict(zip(("saat", "skor"), min(satirlar, key=lambda x: x[1]))),
         en_yuksek=dict(zip(("saat", "skor"), max(satirlar, key=lambda x: x[1]))),
@@ -428,7 +410,6 @@ def ozet_yazdir(ozet: dict) -> None:
     print(f" En dusuk          : {ozet['en_dusuk']['saat']}  ({ozet['en_dusuk']['skor']})")
     print(f" En yuksek         : {ozet['en_yuksek']['saat']}  ({ozet['en_yuksek']['skor']})")
     n = ozet["neden_oranlari"]
-    print(f" Ogrenci sayisi    : {ozet.get('ogrenci_sayisi', 0)}  (kameranin gordugu kisi)")
     print(f" Ortalama oranlar  : yana bakan %{n['yana'] * 100:.0f} | basi egik %{n['egik'] * 100:.0f}"
           f" | gozu kapali %{n['kapali'] * 100:.0f}")
     e = ozet["esneme"]
@@ -579,14 +560,10 @@ def calistir(args: argparse.Namespace) -> None:
     yazici.writerow(CSV_BASLIK)
     olay_yazici.writerow(OLAY_BASLIK)
     olay_dosya.flush()
-    if CSV_KANCASI:
-        CSV_KANCASI(csv_yol)
 
     toplayici = DonemToplayici(esikler)
     oturum = Oturum(args.aralik, args.olay_esik, args.olay_sure, args.yumusatma)
     baslangic = time.monotonic()
-    if BASLANGIC_KANCASI:
-        BASLANGIC_KANCASI(baslangic)
     donem_basi, donem_basi_zaman = baslangic, datetime.now()
     yaw0 = pitch0 = 0.0
     kalib_ornek: list[tuple[float, float]] = []
@@ -641,8 +618,6 @@ def calistir(args: argparse.Namespace) -> None:
     try:
         with vision.FaceLandmarker.create_from_options(secenekler) as dedektor:
             while True:
-                if DURDUR_DOSYASI is not None and DURDUR_DOSYASI.exists():
-                    break
                 tamam, kare = kamera.read()
                 if not tamam:
                     print("Kameradan kare alinamadi, cikiliyor.")

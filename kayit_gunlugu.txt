@@ -1,0 +1,53 @@
+Mikrofon: Kulaklık (HUAWEI FreeBuds SE 2) (44100 Hz)
+Calisiyor. Kayit: C:\Users\kotan\Desktop\hackathon\arayuz\kayitlar\dikkat_20261009_202944.csv
+WARNING: Logging before InitGoogle() is written to STDERR
+W0000 00:00:1791566984.987232   23400 face_landmarker_graph.cc:180] Sets FaceBlendshapesGraph acceleration to xnnpack by default.
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+W0000 00:00:1791566985.001806   21524 inference_feedback_manager.cc:121] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1791566985.018085   21524 inference_feedback_manager.cc:121] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+[20:29:49] skor= 99.1 ort= 99.1 yuz=1.0 yana=0.0 egik=0.0 kapali=0.0 esneme=0.0
+[20:29:55] skor=100.0 ort= 99.5 yuz=1.0 yana=0.0 egik=0.0 kapali=0.0 esneme=0.0
+[20:30:00] skor=100.0 ort= 99.7 yuz=1.0 yana=0.0 egik=0.0 kapali=0.0 esneme=0.0
+[20:30:05] skor= 99.1 ort= 99.5 yuz=1.0 yana=0.0 egik=0.0 kapali=0.0 esneme=0.0
+[20:30:09] skor=100.0 ort= 99.6 yuz=1.0 yana=0.0 egik=0.0 kapali=0.0 esneme=0.0
+
+==========================================================
+ OTURUM OZETI
+==========================================================
+ Saate gore dikkat ortalamasi:
+   20:29:49  99.1  ####################
+   20:29:55 100.0  ####################
+   20:30:00 100.0  ####################
+   20:30:05  99.1  ####################
+   20:30:09 100.0  ####################
+----------------------------------------------------------
+ Baslangic - bitis : 20:29:44 - 20:30:09
+ Genel ortalama    : 99.6
+ En dusuk          : 20:29:49  (99.1)
+ En yuksek         : 20:29:55  (100.0)
+ Ortalama oranlar  : yana bakan %0 | basi egik %0 | gozu kapali %0
+ Esneme            : ortalama %0
+----------------------------------------------------------
+ Dikkat dususu olayi yok.
+==========================================================
+ Olcumler          : C:\Users\kotan\Desktop\hackathon\arayuz\kayitlar\dikkat_20261009_202944.csv
+ Olaylar           : C:\Users\kotan\Desktop\hackathon\arayuz\kayitlar\dikkat_20261009_202944_olaylar.csv
+ Ozet (JSON)       : C:\Users\kotan\Desktop\hackathon\arayuz\kayitlar\dikkat_20261009_202944_ozet.json
+Ses kaydedildi: C:\Users\kotan\Desktop\hackathon\arayuz\ders.wav (7 sn)
+
+=== Transkript ===
+Model yükleniyor (medium)... İlk çalıştırmada model indirilir, biraz sürebilir.
+'C:\Users\kotan\Desktop\hackathon\arayuz\ders.wav' metne çevriliyor...
+[00:01] Altyazı M.K.
+
+Bitti (13 sn). 1 parça.
+Kaydedildi: transkript.json, transkript.txt
+
+=== Notlar ===
+Notlar çıkarılıyor...
+Kayıtta ders anlatımı algılanamadı; not üretilmedi.
+Odak verisi: C:\Users\kotan\Desktop\hackathon\arayuz\kayitlar\dikkat_20261009_202944.csv (5 ölçüm). Bölümlerle eşleştiriliyor...
+
+Bitti. Kaydedildi: notlar.json, notlar.md
+
+Bitti. Arayüz yeni dersi gösterecek.

@@ -9,7 +9,6 @@ render_student_view      → odak grafiği (tıklanabilir) + Eksik Tamamlama Kar
 
 from __future__ import annotations
 
-import html
 from typing import List, Optional, Tuple
 
 import plotly.graph_objects as go
@@ -32,7 +31,7 @@ OK = "#30A46C"
 
 CSS = """
 <style>
-.block-container {padding-top: 3.8rem; max-width: 1200px;}  /* üstteki Streamlit çubuğu başlığı kesmesin */
+.block-container {padding-top: 2.2rem; max-width: 1200px;}
 .app-title {font-size: 1.75rem; font-weight: 700; color: var(--text-color); margin: 0;}
 .app-sub {color: #6B7385; margin: .15rem 0 1rem 0; font-size: .95rem;}
 .badge-row {display:flex; flex-wrap:wrap; gap:.5rem; margin:.25rem 0 1.1rem 0;}
@@ -55,13 +54,25 @@ CSS = """
          border-radius:0 8px 8px 0; font-size:.92rem; line-height:1.5;}
 .missed.mild {border-left-color:#F5A524; background: rgba(245,165,36,.07);}
 .summary-box {font-size:1.02rem; line-height:1.6;}
-table.ozet {border-collapse:collapse; width:100%; margin:.4rem 0 1rem 0; font-size:.93rem;}
-table.ozet td {padding:.42rem .7rem; border-bottom:1px solid rgba(128,128,128,.22); vertical-align:top;}
-table.ozet td:first-child {color:#6B7385; width:15rem; white-space:nowrap;}
-table.ozet td:last-child {font-weight:600;}
-.rol-kart {border:1px solid rgba(128,128,128,.28); border-radius:16px; padding:1.4rem 1.5rem 1rem; height:100%;}
-.rol-kart h3 {margin:0 0 .4rem 0; font-size:1.25rem;}
-.rol-kart p {color:#6B7385; font-size:.93rem; line-height:1.5; margin:0 0 .8rem 0; min-height:4.4rem;}
+.card-duration-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #FFF5F5;
+    color: #C53030;
+    border: 1px solid #FEB2B2;
+    padding: 3px 9px;
+    border-radius: 12px;
+    font-size: 0.83rem;
+    font-weight: 700;
+}
+.gap-hover-card {
+    transition: all 0.2s ease-in-out;
+}
+.gap-hover-card:hover {
+    box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+    border-color: #3182ce;
+}
 </style>
 """
 
@@ -86,7 +97,7 @@ PRIVACY_BADGES = [
     ("📷", "Kamera görüntüsü diske yazılmaz", ""),
     ("🧠", "Kareler RAM'de işlenir ve anında atılır", ""),
     ("🚫", "Yüz tanıma / kimlik tespiti yok", ""),
-    ("🎙️", "Ses metne çevrilince silinir · yalnızca öğretmenin sesi yazılır", ""),
+    ("🎙️", "Ses metne çevrilince silinir", ""),
     ("💻", "Odak profili yalnızca bu oturumda", "info"),
 ]
 
@@ -96,8 +107,7 @@ PRIVACY_PRINCIPLES = [
     ("Uçta Anonim Analiz",
      "Yalnızca baş açısı ve göz açıklık oranından 0-100 arası soyut bir odak skoru üretilir. Kare hemen yok edilir."),
     ("Geçici Ses İşleme",
-     "Ses bu cihazda yerel Whisper ile metne çevrilir ve çevrildiği anda silinir. Yalnızca öğretmenin (derste en çok "
-     "konuşan kişinin) sesi yazıya dökülür; öğrencilerin konuşmaları metne çevrilmez."),
+     "Öğretmen sesi yerel Whisper ile metne çevrildiği anda geçici ses dosyası bellekten ve diskten silinir."),
     ("İstemci Taraflı Öğrenci Verisi",
      "Dikkat profili merkezi bir veritabanına gitmez; bu tarayıcı oturumu kapanınca kaybolur."),
     ("Buluta Yalnızca Ders İçeriği",
@@ -155,165 +165,73 @@ def _notes_to_markdown(notes: LectureNotes, lecture: Lecture) -> str:
     return "\n".join(out)
 
 
-def render_ders_ozeti(lecture: Lecture, bilgi: dict, odak: Optional[dict], threshold: float) -> None:
-    """Öğretmen: ders sonu özet tablosu (öğrenci sayısı dahil) + sınıf odağı grafiği.
-
-    bilgi: gercek_veri.ders_bilgisi() (demo için boş sözlük)
-    odak:  {"raw", "smooth", "gaps", "parts"} ya da None (odak izlenmediyse)
-    """
-    st.markdown("#### 📊 Ders özeti")
-    odak_var = bool(odak and odak.get("raw"))
-    ort = (sum(s.focus_score for s in odak["raw"]) / len(odak["raw"])) if odak_var else None
-    dusuk_sn = sum(g.duration for g, _ in odak["parts"]) if odak_var else 0.0
-
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Öğrenci sayısı", bilgi.get("ogrenci_sayisi") or "—",
-              help="Kameranın ders boyunca aynı anda gördüğü kişi sayısı (yüzü kameraya dönük olanlar). "
-                   "Kimlik tespiti yapılmaz; yalnızca sayılır.")
-    m2.metric("Ders süresi", fmt_t(lecture.duration))
-    m3.metric("Sınıf odak ortalaması", f"{ort:.0f}/100" if ort is not None else "—")
-    m4.metric("Odağın düştüğü süre", fmt_t(dusuk_sn) if odak_var else "—")
-
-    satirlar = [("Ders adı", lecture.title)]
-    if bilgi.get("zaman"):
-        satirlar.append(("Tarih", bilgi["zaman"]))
-    satirlar.append(("Ders süresi", f"{fmt_t(lecture.duration)} dk"))
-    if bilgi:
-        satirlar.append(("Derse katılan öğrenci sayısı",
-                         f"{bilgi['ogrenci_sayisi']} kişi" if bilgi.get("ogrenci_sayisi")
-                         else ("ölçülemedi" if bilgi.get("odak_izlendi") else "izlenmedi (kamera kapalıydı)")))
-        satirlar.append(("Sınıf odağı", f"ortalama {ort:.0f}/100 · {len(odak['gaps'])} bölümde düşüş" if odak_var
-                         else "izlenmedi"))
-        if not bilgi.get("ses_kaydedildi", True):
-            satirlar.append(("Ses", "dinlenmedi (mikrofon kapalıydı)"))
-        else:
-            a = bilgi.get("ayrim") or {}
-            if a.get("uygulandi") and a.get("atlanan_parca"):
-                ses = (f"yalnızca öğretmen metne çevrildi: {a.get('ogretmen_sn', 0):.0f} sn öğretmen · "
-                       f"başka seslere ait {a['atlanan_parca']} parça ({a.get('atlanan_sn', 0):.0f} sn) atlandı")
-            elif a.get("uygulandi"):
-                ses = "kayıttaki konuşmanın tamamı öğretmene ait (başka ses bulunmadı)"
-            elif a:
-                ses = f"öğretmen sesi ayrılamadı ({a.get('neden') or 'bilinmiyor'}); tüm konuşma metne çevrildi"
-            else:
-                ses = "metne çevrildi"
-            satirlar.append(("Ses", ses))
-            if bilgi.get("duzeltilen_satir"):
-                satirlar.append(("Transkript", f"{bilgi['duzeltilen_satir']} satırda yanlış duyulan kelime düzeltildi"))
-    else:
-        satirlar.append(("Kaynak", "Demo verisi (gerçek kayıt değil)"))
-    st.markdown("<table class='ozet'>" + "".join(
-        f"<tr><td>{html.escape(str(k))}</td><td>{html.escape(str(v))}</td></tr>" for k, v in satirlar)
-        + "</table>", unsafe_allow_html=True)
-
-    if odak_var:
-        st.markdown("##### Ders boyunca sınıf odağı")
-        st.caption("Gölgeli alanlar sınıf ortalamasının eşik altına düştüğü anlar; üstte o sırada anlatılan bölüm yazar.")
-        fig = build_focus_figure(odak["raw"], odak["smooth"], odak["gaps"], lecture, threshold, None,
-                                 odak["parts"], markers=False)
-        st.plotly_chart(fig, width="stretch", key="sinif_odak_grafigi", config={"displayModeBar": False})
-        if odak["gaps"]:
-            st.markdown("**Odağın düştüğü bölümler:** " + " · ".join(
-                f"{g.topic} ({fmt_t(g.start_time)}–{fmt_t(g.end_time)}, ort. {g.mean_focus:.0f})" for g in odak["gaps"]))
-    elif bilgi and not bilgi.get("odak_izlendi"):
-        st.info("Bu derste sınıf odağı izlenmedi (başlatırken kamera kapalı seçildi).")
-
-
-def render_teacher_view(lecture: Lecture, notes: LectureNotes, approved: bool, on_approve, on_revoke) -> None:
-    """Öğretmen: notları düzenle, onayla ve öğrencilerle paylaş.
-
-    approved:   bu ders şu anda paylaşılmış mı (dosyadan okunur; tüm oturumlarda aynı)
-    on_approve: (LectureNotes) -> None ; on_revoke: () -> None
-    """
-    # Kutu anahtarları derse özgü: yeni bir ders yüklendiğinde eski dersin metni kutularda kalmaz
-    did = lecture.lecture_id
+def render_teacher_view(lecture: Lecture, notes: LectureNotes) -> None:
+    ss = st.session_state
+    approved = ss.get("notes_approved", False)
 
     head, status = st.columns([3, 1])
     with head:
-        st.subheader("📝 " + notes.title)
+        st.subheader(notes.title)
         st.caption(f"{lecture.subject} · {lecture.grade_level or ''} · {fmt_t(lecture.duration)} dk · "
                    f"{len(lecture.segments)} bölüm")
     with status:
-        cls, txt = ("done", "✓ Öğrencilerle paylaşıldı") if approved else ("wait", "● Onay bekliyor")
+        cls, txt = ("done", "✓ Onaylandı") if approved else ("wait", "● Onay bekliyor")
         st.markdown(f'<div style="text-align:right;margin-top:.6rem"><span class="status {cls}">{txt}</span></div>',
                     unsafe_allow_html=True)
 
     st.markdown("**Ders özeti**")
-    summary = st.text_area("Ders özeti", notes.summary, height=90, key=f"note_summary_{did}",
+    summary = st.text_area("Ders özeti", notes.summary, height=90, key="note_summary",
                            label_visibility="collapsed", disabled=approved)
 
     st.markdown("#### Bölüm notları")
-    st.caption("Notlar düzenlenebilir. Onayladığınızda kilitlenir ve öğrenci arayüzünde görünür.")
+    st.caption("Notlar düzenlenebilir. Onaydan sonra kilitlenir ve paylaşıma hazır hale gelir.")
     edited_sections = []
     for i, sec in enumerate(notes.sections):
         seg = lecture.segments[i] if i < len(lecture.segments) else None
         label = f"{i + 1}. {sec.topic}" + (f"  ·  {fmt_t(seg.start_time)}–{fmt_t(seg.end_time)}" if seg else "")
         with st.expander(label, expanded=(i == 0)):
-            content = st.text_area("İçerik", sec.content, height=130, key=f"note_sec_{did}_{i}",
+            content = st.text_area("İçerik", sec.content, height=130, key=f"note_sec_{i}",
                                    label_visibility="collapsed", disabled=approved)
             if sec.key_terms:
-                st.markdown("".join(f'<span class="chip">{html.escape(t)}</span>' for t in sec.key_terms),
+                st.markdown("".join(f'<span class="chip">{t}</span>' for t in sec.key_terms),
                             unsafe_allow_html=True)
             if seg:
                 with st.popover("Ham transkripti göster"):
-                    st.caption("Ses tanıma çıktısı (yalnızca öğretmenin sesi)")
+                    st.caption("STT çıktısı (düzenlenmemiş)")
                     st.write(seg.transcript)
             edited_sections.append(sec.model_copy(update={"content": content}))
 
+    st.markdown("#### Tahta çözümleri")
     edited_board = []
-    if notes.board_solutions:
-        st.markdown("#### Örnekler ve çözümler")
     for i, sol in enumerate(notes.board_solutions):
         lines = sol.count("\n") + 1
-        edited_board.append(st.text_area(f"Çözüm {i + 1}", sol, key=f"note_board_{did}_{i}", disabled=approved,
+        edited_board.append(st.text_area(f"Çözüm {i + 1}", sol, key=f"note_board_{i}", disabled=approved,
                                           height=max(68, 28 * lines + 20)))
 
     final = notes.model_copy(update={"summary": summary, "sections": edited_sections,
                                      "board_solutions": edited_board, "approved": approved})
 
     st.divider()
-    c1, c2, c3 = st.columns([1.4, 1.2, 2])
+    c1, c2, c3 = st.columns([1.2, 1.2, 2])
     with c1:
         if not approved:
-            if st.button("✓ Onayla ve öğrencilerle paylaş", type="primary", width="stretch"):
-                on_approve(final)
+            if st.button("✓ Onayla ve paylaşıma hazırla", type="primary", width="stretch"):
+                ss.notes_approved = True
                 st.rerun()
         else:
-            if st.button("↺ Paylaşımı geri al", width="stretch"):
-                on_revoke()
+            if st.button("↺ Onayı geri al", width="stretch"):
+                ss.notes_approved = False
                 st.rerun()
     with c2:
         st.download_button("⬇ Notları indir (.md)", _notes_to_markdown(final, lecture),
-                           file_name=f"{lecture.lecture_id}-ders-notu.md", mime="text/markdown", width="stretch")
+                           file_name=f"{lecture.lecture_id}-ders-notu.md", mime="text/markdown",
+                           disabled=not approved, width="stretch")
     with c3:
         if approved:
-            st.success("Notlar paylaşıldı: öğrenci arayüzünde görünüyor.")
-        else:
-            st.caption("Onaylayana kadar öğrenciler bu dersin notlarını göremez.")
+            st.success("Notlar onaylandı. Öğrencilerle paylaşılabilir.")
 
     with st.expander("Tam ham transkript (karşılaştırma için)"):
         st.text(lecture.full_transcript)
-
-
-def render_student_notes(lecture: Lecture, notes: LectureNotes) -> None:
-    """Öğrenci: öğretmenin onayladığı notlar (salt okunur)."""
-    st.subheader(notes.title)
-    st.caption(f"{lecture.subject} · {lecture.grade_level or ''} · {fmt_t(lecture.duration)} dk")
-    if notes.summary:
-        st.markdown(f"<div class='summary-box'>{html.escape(notes.summary)}</div>", unsafe_allow_html=True)
-        st.write("")
-    for i, sec in enumerate(notes.sections):
-        with st.expander(f"{i + 1}. {sec.topic}", expanded=True):
-            st.text(sec.content)
-            if sec.key_terms:
-                st.markdown("".join(f'<span class="chip">{html.escape(t)}</span>' for t in sec.key_terms),
-                            unsafe_allow_html=True)
-    if notes.board_solutions:
-        st.markdown("#### Örnekler ve çözümler")
-        for i, sol in enumerate(notes.board_solutions, 1):
-            st.text(f"{i}. {sol}")
-    st.download_button("⬇ Notları indir (.md)", _notes_to_markdown(notes, lecture),
-                       file_name=f"{lecture.lecture_id}-ders-notu.md", mime="text/markdown")
 
 
 # ---------------------------------------------------------------------------
@@ -321,9 +239,8 @@ def render_student_notes(lecture: Lecture, notes: LectureNotes) -> None:
 # ---------------------------------------------------------------------------
 def build_focus_figure(raw: List[FocusSample], smooth: List[FocusSample], gaps: List[GapWindow],
                        lecture: Lecture, threshold: float, selected: Optional[int],
-                       parts: Optional[List[Tuple[GapWindow, int]]] = None, markers: bool = True) -> go.Figure:
-    """gaps: kart başına birleşik aralık; parts: (gerçek düşüş aralığı, kart indeksi).
-    markers=False: öğretmen görünümü (kart işaretleri yok, yalnızca düşüş aralıkları)."""
+                       parts: Optional[List[Tuple[GapWindow, int]]] = None) -> go.Figure:
+    """gaps: kart başına birleşik aralık; parts: (gerçek düşüş aralığı, kart indeksi)."""
     if parts is None:
         parts = [(g, i) for i, g in enumerate(gaps)]
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.84, 0.16], vertical_spacing=0.04)
@@ -350,12 +267,42 @@ def build_focus_figure(raw: List[FocusSample], smooth: List[FocusSample], gaps: 
     fig.add_trace(go.Scatter(x=t_raw, y=[s.focus_score for s in raw], mode="lines", name="Ham sinyal",
                              line=dict(color=RAW, width=1), hoverinfo="skip"), row=1, col=1)
 
-    # Yumuşatılmış odak (tıklanabilir noktalar)
+    # Yumuşatılmış odak (tıklanabilir noktalar ve zengin hover bilgisi)
+    smooth_hover_texts = []
+    for ts, sc in zip(t_sm, y_sm):
+        time_str = fmt_t(ts)
+        matched_gap = None
+        for g in gaps:
+            if g.start_time <= ts <= g.end_time:
+                matched_gap = g
+                break
+        
+        if matched_gap:
+            g_dur = int(round(matched_gap.duration))
+            g_dur_str = f"{g_dur} sn" if g_dur < 60 else f"{g_dur // 60} dk {g_dur % 60} sn"
+            smooth_hover_texts.append(
+                f"<b>{time_str}</b> · Odak: <b>%{sc:.0f}</b><br>"
+                f"🚨 <b>DİKKAT KOPMASI ARALIĞI</b><br>"
+                f"📌 Konu: {matched_gap.topic}<br>"
+                f"⏱️ Toplam Düşüş Süresi: <b>{g_dur_str}</b><br>"
+                f"📉 Bölüm Ort. Odak: %{matched_gap.mean_focus:.0f}"
+            )
+        else:
+            # Normal odak aralığı
+            smooth_hover_texts.append(f"<b>{time_str}</b> · Anlık Odak: <b>%{sc:.0f}</b><extra></extra>")
+
     fig.add_trace(go.Scatter(
         x=t_sm, y=y_sm, mode="lines+markers", name="Odak (yumuşatılmış)",
-        line=dict(color=LINE, width=2.5), marker=dict(size=4, color=LINE, opacity=0.0),
-        customdata=[fmt_t(t) for t in t_sm],
-        hovertemplate="%{customdata} · odak %{y:.0f}<extra></extra>"), row=1, col=1)
+        line=dict(color=LINE, width=2.5), marker=dict(size=5, color=LINE, opacity=0.2),
+        hoverinfo="text",
+        hovertext=smooth_hover_texts,
+        hoverlabel=dict(
+            bgcolor="#1A202C",
+            font_size=12,
+            font_family="-apple-system, BlinkMacSystemFont, sans-serif",
+            bordercolor="#3182CE"
+        )
+    ), row=1, col=1)
 
     # Eşik çizgisi
     fig.add_hline(y=threshold, line=dict(color=THRESH, width=1.2, dash="dash"), row=1, col=1,
@@ -363,17 +310,38 @@ def build_focus_figure(raw: List[FocusSample], smooth: List[FocusSample], gaps: 
                   annotation_font=dict(size=10, color=MUTED))
 
     # Kart işaretleri: tıklanınca ilgili kart açılır
-    if gaps and markers:
+    if gaps:
+        # Zengin Hover (Pop-up): Düşüş süresi, konu, ortalama ve en düşük odak
+        hover_texts = []
+        for i, g in enumerate(gaps):
+            dur_sn = int(round(g.duration))
+            dur_text = f"{dur_sn} sn" if dur_sn < 60 else f"{dur_sn // 60} dk {dur_sn % 60} sn"
+            ht = (
+                f"<b>🚨 ODAK DÜŞÜŞÜ: KART {i + 1}</b><br>"
+                f"📌 <b>Konu:</b> {g.topic}<br>"
+                f"⏱️ <b>Düşüş Süresi:</b> {dur_text} ({fmt_t(g.start_time)} – {fmt_t(g.end_time)})<br>"
+                f"📉 <b>Ortalama Odak:</b> %{g.mean_focus:.0f} (En Düşük: %{g.min_focus:.0f})<br>"
+                f"⚠️ <b>Bölümün Kaçırılanı:</b> %{g.coverage * 100:.0f}<br>"
+                f"<i>👉 Tıklayarak Eksik Tamamlama Kartını açabilirsiniz</i>"
+            )
+            hover_texts.append(ht)
+
         fig.add_trace(go.Scatter(
             x=[_marker_x(i, parts) for i in range(len(gaps))], y=[90] * len(gaps),
             mode="markers+text", name="Eksik Tamamlama Kartı",
-            marker=dict(size=[24 if i == selected else 19 for i in range(len(gaps))],
+            marker=dict(size=[26 if i == selected else 20 for i in range(len(gaps))],
                         color=[gap_color(g) for g in gaps], symbol="square",
-                        line=dict(color="white", width=1.5)),
+                        line=dict(color="white", width=2)),
             text=[f"{i + 1}" for i in range(len(gaps))], textposition="middle center",
-            textfont=dict(color="white", size=11),
-            customdata=[[g.topic, fmt_t(g.start_time), fmt_t(g.end_time)] for g in gaps],
-            hovertemplate="<b>Kart %{text}</b> · %{customdata[0]}<br>%{customdata[1]}–%{customdata[2]} · tıkla ve aç<extra></extra>",
+            textfont=dict(color="white", size=11, family="sans-serif"),
+            hoverinfo="text",
+            hovertext=hover_texts,
+            hoverlabel=dict(
+                bgcolor="#1A202C",
+                font_size=12,
+                font_family="-apple-system, BlinkMacSystemFont, sans-serif",
+                bordercolor="#E53E3E"
+            ),
         ), row=1, col=1)
 
     # Isı şeridi
@@ -382,12 +350,10 @@ def build_focus_figure(raw: List[FocusSample], smooth: List[FocusSample], gaps: 
         colorscale=[[0, GAP_SEVERE], [0.35, GAP_MILD], [0.55, "#E9E3B5"], [1, OK]],
         hovertemplate="%{x:.0f} sn · odak %{z:.0f}<extra></extra>"), row=2, col=1)
 
-    # Eksen işaretleri: ders ne kadar kısa/uzun olursa olsun ~6-10 işaret
-    adim = next((a for a in (5, 10, 15, 30, 60, 120, 300, 600) if lecture.duration / a <= 10), 900)
-    ticks = list(range(0, int(lecture.duration) + 1, adim))
+    ticks = list(range(0, int(lecture.duration) + 1, 60))
     fig.update_xaxes(tickvals=ticks, ticktext=[fmt_t(t) for t in ticks], showgrid=False,
                      range=[0, lecture.duration], row=2, col=1)
-    fig.update_xaxes(showgrid=False, range=[0, lecture.duration], showticklabels=False, row=1, col=1)
+    fig.update_xaxes(showgrid=False, range=[0, lecture.duration], row=1, col=1)
     fig.update_yaxes(range=[0, 110], tickvals=[0, 25, 50, 75, 100], gridcolor="rgba(128,128,128,.15)",
                      title_text="Odak", row=1, col=1)
     fig.update_yaxes(showticklabels=False, row=2, col=1)
@@ -439,14 +405,9 @@ def _handle_chart_click(event, parts: List[Tuple[GapWindow, int]], lecture: Lect
 # ---------------------------------------------------------------------------
 # Öğrenci görünümü: kartlar ve quiz
 # ---------------------------------------------------------------------------
-def _quiz_key(gap: GapWindow, qi: int) -> str:
-    """Cevap anahtarı: ders + konu bölümü + soru. Kart sırası değişse de (eşik kaydırıcı) cevap doğru kartta kalır."""
-    return f"quiz_{st.session_state.get('focus_lecture_id', '')}_{gap.segment_index}_{qi}"
-
-
-def _render_quiz(gap: GapWindow, card: RecoveryCard) -> None:
+def _render_quiz(card_idx: int, card: RecoveryCard) -> None:
     for qi, q in enumerate(card.questions):
-        key = _quiz_key(gap, qi)
+        key = f"quiz_{card_idx}_{qi}"
         st.markdown(f"**Soru {qi + 1}.** {q.question}")
         choice = st.radio(f"Soru {qi + 1}", q.options, index=None, key=key, label_visibility="collapsed")
         if choice is not None:
@@ -459,39 +420,13 @@ def _render_quiz(gap: GapWindow, card: RecoveryCard) -> None:
             st.write("")
 
 
-def render_genel_quiz(sorular: List[dict], ders_id: str) -> None:
-    """Gerçek derslerde Gemini'nin hazırladığı ders geneli mini quiz (notlar.json -> quiz)."""
-    if not sorular:
-        return
-    st.markdown("#### 📝 Ders sonu mini quiz")
-    st.caption("Dersin tamamından sorular. Cevabını seçince doğrusu ve açıklaması görünür.")
-    dogru_sayisi = yanit_sayisi = 0
-    with st.container(border=True):
-        for i, q in enumerate(sorular):
-            st.markdown(f"**{i + 1}.** {q['soru']}")
-            secim = st.radio(f"Quiz {i + 1}", range(len(q["secenekler"])), index=None,
-                             format_func=lambda j, q=q: q["secenekler"][j],
-                             key=f"quiz_genel_{ders_id}_{i}", label_visibility="collapsed")
-            if secim is not None:
-                yanit_sayisi += 1
-                if secim == q["dogru_cevap"]:
-                    dogru_sayisi += 1
-                    st.success("**Doğru!** " + q["aciklama"])
-                else:
-                    st.error(f"**Yanlış.** Doğru cevap: {q['secenekler'][q['dogru_cevap']]}")
-                    if q["aciklama"]:
-                        st.info(q["aciklama"])
-        if yanit_sayisi == len(sorular):
-            st.markdown(f"**Sonuç: {dogru_sayisi}/{len(sorular)} doğru**")
-
-
-def quiz_progress(cards: List[RecoveryCard], gaps: List[GapWindow]) -> tuple[int, int, int]:
+def quiz_progress(cards: List[RecoveryCard]) -> tuple[int, int, int]:
     total = sum(len(c.questions) for c in cards)
     answered = correct = 0
-    for c, g in zip(cards, gaps):
+    for ci, c in enumerate(cards):
         for qi, q in enumerate(c.questions):
-            v = st.session_state.get(_quiz_key(g, qi))
-            if v is not None and v in q.options:
+            v = st.session_state.get(f"quiz_{ci}_{qi}")
+            if v is not None:
                 answered += 1
                 correct += int(q.options.index(v) == q.correct_index)
     return answered, correct, total
@@ -510,36 +445,46 @@ def _card_minutes(card: RecoveryCard) -> str:
 
 def render_card(idx: int, card: RecoveryCard, gap: GapWindow) -> None:
     col = gap_color(gap)
+    dur_sn = int(round(gap.duration))
+    dur_str = f"{dur_sn} sn" if dur_sn < 60 else f"{dur_sn // 60} dk {dur_sn % 60} sn"
+
     with st.container(border=True):
         top_l, top_r = st.columns([3, 1.3])
         with top_l:
             st.markdown(f"<span style='color:{col};font-weight:700'>■ Kart {idx + 1}</span> &nbsp; "
                         f"<span style='font-size:1.15rem;font-weight:700'>{card.topic}</span>",
                         unsafe_allow_html=True)
-            st.caption(f"Kaçırılan an: {fmt_t(gap.start_time)}–{fmt_t(gap.end_time)} · "
-                       f"bölümün %{gap.coverage * 100:.0f}'ı · ortalama odak {gap.mean_focus:.0f}")
+            # Net olarak düşüş süresi rozeti ve aralık bilgisi
+            st.markdown(
+                f"<div style='margin-top:0.25rem; font-size:0.9rem; color:#4A5568;'>"
+                f"⏱️ <b>Odak Düşüş Süresi:</b> <span class='card-duration-badge'>{dur_str} boyunca</span> "
+                f"({fmt_t(gap.start_time)} – {fmt_t(gap.end_time)}) · "
+                f"bölümün %{gap.coverage * 100:.0f}'ı · ortalama odak <b>%{gap.mean_focus:.0f}</b>"
+                f"</div>",
+                unsafe_allow_html=True
+            )
         with top_r:
             st.markdown(f"<div style='text-align:right;color:#6B7385;font-size:.85rem;margin-top:.3rem'>"
                         f"⏱ {_card_minutes(card)}</div>", unsafe_allow_html=True)
 
-        st.markdown(f"<div class='summary-box'>{html.escape(card.summary)}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='summary-box'>{card.summary}</div>", unsafe_allow_html=True)
         if card.key_points:
             st.markdown("**Akılda kalsın**")
             st.markdown("\n".join(f"- {p}" for p in card.key_points))
 
         with st.expander("Derste o an ne anlatılıyordu? (transkript)"):
-            st.markdown(f"<div class='missed {'mild' if col == GAP_MILD else ''}'>…{html.escape(gap.missed_transcript)}…</div>",
+            st.markdown(f"<div class='missed {'mild' if col == GAP_MILD else ''}'>…{gap.missed_transcript}…</div>",
                         unsafe_allow_html=True)
 
         st.markdown("##### Pekiştirme soruları")
-        _render_quiz(gap, card)
+        _render_quiz(idx, card)
 
 
 def render_student_view(lecture: Lecture, raw: List[FocusSample], smooth: List[FocusSample],
                         gaps: List[GapWindow], parts: List[Tuple[GapWindow, int]],
                         cards: List[RecoveryCard], threshold: float, stats: dict) -> None:
     ss = st.session_state
-    answered, correct, total = quiz_progress(cards, gaps)
+    answered, correct, total = quiz_progress(cards)
 
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Ortalama odak", f"{stats['mean']:.0f}/100")
@@ -589,3 +534,264 @@ def render_student_view(lecture: Lecture, raw: List[FocusSample], smooth: List[F
     if choice is None:  # segmented_control seçimi kaldırılabilir; boş bırakma
         choice = 0
     render_card(choice, cards[choice], gaps[choice])
+
+
+# ---------------------------------------------------------------------------
+# Dijital Tahta Bileşeni
+# ---------------------------------------------------------------------------
+TAHTA_HTML = """
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+  body {
+    background-color: #1a202c;
+    color: #e2e8f0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+  .toolbar {
+    background-color: #2d3748;
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 2px solid #4a5568;
+    flex-wrap: wrap;
+  }
+  .tool-btn {
+    background: #4a5568;
+    border: none;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s;
+  }
+  .tool-btn:hover { background: #718096; }
+  .tool-btn.active { background: #3182ce; box-shadow: 0 0 8px rgba(49,130,206,0.6); }
+  .color-picker {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .color-dot {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid #2d3748;
+    transition: transform 0.1s;
+  }
+  .color-dot:hover { transform: scale(1.15); }
+  .color-dot.active { border-color: white; transform: scale(1.15); }
+  .canvas-container {
+    flex: 1;
+    position: relative;
+    background-color: #171923;
+    background-image: 
+      radial-gradient(#2d3748 1px, transparent 1px);
+    background-size: 24px 24px;
+    cursor: crosshair;
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  .status-badge {
+    margin-left: auto;
+    font-size: 12px;
+    color: #a0aec0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #48bb78;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.4; }
+    100% { opacity: 1; }
+  }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <button class="tool-btn active" id="btn-pen">✏️ Kalem</button>
+  <button class="tool-btn" id="btn-eraser">🧹 Silgi</button>
+  
+  <div style="height:20px; width:1px; background:#4a5568; margin:0 4px;"></div>
+  
+  <div class="color-picker">
+    <div class="color-dot active" style="background:#ffffff;" data-color="#ffffff"></div>
+    <div class="color-dot" style="background:#63b3ed;" data-color="#63b3ed"></div>
+    <div class="color-dot" style="background:#68d391;" data-color="#68d391"></div>
+    <div class="color-dot" style="background:#f6e05e;" data-color="#f6e05e"></div>
+    <div class="color-dot" style="background:#fc8181;" data-color="#fc8181"></div>
+  </div>
+
+  <div style="height:20px; width:1px; background:#4a5568; margin:0 4px;"></div>
+
+  <label style="font-size:12px; color:#cbd5e0;">Kalınlık:
+    <input type="range" id="size-slider" min="2" max="24" value="4" style="vertical-align:middle; cursor:pointer;">
+  </label>
+
+  <button class="tool-btn" id="btn-clear" style="margin-left:10px; background:#e53e3e;">🗑️ Tahtayı Temizle</button>
+  <button class="tool-btn" id="btn-download" style="background:#319795;">💾 Tahtayı Kaydet</button>
+
+  <div class="status-badge">
+    <span class="status-dot"></span>
+    <span>Canlı Tahta Aktif</span>
+  </div>
+</div>
+
+<div class="canvas-container" id="canvas-container">
+  <canvas id="paint-canvas"></canvas>
+</div>
+
+<script>
+  const canvas = document.getElementById('paint-canvas');
+  const ctx = canvas.getContext('2d');
+  const container = document.getElementById('canvas-container');
+
+  function resizeCanvas() {
+    canvas.width = container.clientWidth;
+    canvas.height = container.clientHeight;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+  }
+  window.addEventListener('resize', resizeCanvas);
+  setTimeout(resizeCanvas, 100);
+
+  let isDrawing = false;
+  let currentTool = 'pen';
+  let currentColor = '#ffffff';
+  let currentSize = 4;
+  let lastX = 0;
+  let lastY = 0;
+
+  function startDrawing(e) {
+    isDrawing = true;
+    const rect = canvas.getBoundingClientRect();
+    lastX = e.clientX - rect.left;
+    lastY = e.clientY - rect.top;
+  }
+
+  function draw(e) {
+    if (!isDrawing) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    ctx.beginPath();
+    ctx.moveTo(lastX, lastY);
+    ctx.lineTo(x, y);
+
+    if (currentTool === 'eraser') {
+      ctx.strokeStyle = '#171923';
+      ctx.lineWidth = currentSize * 3;
+    } else {
+      ctx.strokeStyle = currentColor;
+      ctx.lineWidth = currentSize;
+    }
+
+    ctx.stroke();
+    lastX = x;
+    lastY = y;
+  }
+
+  function stopDrawing() {
+    isDrawing = false;
+  }
+
+  canvas.addEventListener('mousedown', startDrawing);
+  canvas.addEventListener('mousemove', draw);
+  canvas.addEventListener('mouseup', stopDrawing);
+  canvas.addEventListener('mouseout', stopDrawing);
+
+  canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const mouseEvent = new MouseEvent('mousedown', {
+      clientX: touch.clientX,
+      clientY: touch.clientY
+    });
+    canvas.dispatchEvent(mouseEvent);
+  });
+  canvas.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const mouseEvent = new MouseEvent('mousemove', {
+      clientX: touch.clientX,
+      clientY: touch.clientY
+    });
+    canvas.dispatchEvent(mouseEvent);
+  });
+  canvas.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    canvas.dispatchEvent(new MouseEvent('mouseup', {}));
+  });
+
+  document.getElementById('btn-pen').addEventListener('click', () => {
+    currentTool = 'pen';
+    document.getElementById('btn-pen').classList.add('active');
+    document.getElementById('btn-eraser').classList.remove('active');
+  });
+
+  document.getElementById('btn-eraser').addEventListener('click', () => {
+    currentTool = 'eraser';
+    document.getElementById('btn-eraser').classList.add('active');
+    document.getElementById('btn-pen').classList.remove('active');
+  });
+
+  document.querySelectorAll('.color-dot').forEach(dot => {
+    dot.addEventListener('click', () => {
+      document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('active'));
+      dot.classList.add('active');
+      currentColor = dot.getAttribute('data-color');
+      currentTool = 'pen';
+      document.getElementById('btn-pen').classList.add('active');
+      document.getElementById('btn-eraser').classList.remove('active');
+    });
+  });
+
+  document.getElementById('size-slider').addEventListener('input', (e) => {
+    currentSize = e.target.value;
+  });
+
+  document.getElementById('btn-clear').addEventListener('click', () => {
+    if (confirm('Tahtadaki tüm çizimler silinsin mi?')) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  });
+
+  document.getElementById('btn-download').addEventListener('click', () => {
+    const link = document.createElement('a');
+    link.download = 'ders-tahta-notu.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  });
+</script>
+</body>
+</html>
+"""
+
+def render_tahta_sekmesi(yukseklik: int = 700) -> None:
+    st.caption("Eğitmenin derste formül yazıp soru çözebileceği, tablet/mouse uyumlu canlı dijital tahta.")
+    import streamlit.components.v1 as components
+    components.html(TAHTA_HTML, height=yukseklik, scrolling=False)

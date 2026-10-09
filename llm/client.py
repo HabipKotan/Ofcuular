@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
-import time
+from typing import Any, Dict
 
 from core.config import settings
 from core.schemas import GapWindow, Lecture, LectureNotes, NoteSection, QuizQuestion, RecoveryCard
@@ -162,46 +163,39 @@ class MockLLMService:
                 ],
             )
         else:
-            # Konudan bağımsız yedek kart: LLM'e ulaşılamadığında gerçek derslerde de yanlış bilgi vermez.
-            metin = " ".join(gap.missed_transcript.split())
-            cumleler = [c.strip() for c in re.split(r"(?<=[.!?…])\s+", metin) if len(c.strip()) > 8]
-            ozet = " ".join(cumleler[:4]) or metin[:400]
-            if len(ozet) > 600:
-                ozet = ozet[:600].rsplit(" ", 1)[0] + "…"
-            ilk = cumleler[0] if cumleler else metin[:140]
-            if len(ilk) > 140:
-                ilk = ilk[:140].rsplit(" ", 1)[0] + "…"
             return RecoveryCard(
                 topic=gap.topic,
                 gap_start=gap.start_time,
                 gap_end=gap.end_time,
                 summary=(
-                    f"Bu sırada derste “{gap.topic}” anlatılıyordu. Öğretmenin o andaki anlatımından: {ozet}"
+                    f"'{gap.topic}' konusu anlatılırken dikkat dağınıklığı tespit edildi. "
+                    f"Bu bölümde öğretmen konunun ana prensiplerini ve temel kurallarını aktarmıştır: "
+                    f"{gap.missed_transcript[:250]}..."
                 ),
                 key_points=[
-                    f"Bu aralıkta işlenen konu: {gap.topic}.",
-                    "Aşağıdaki transkript bölümünü okuyup örnekleri kendin tekrar çözmeyi dene.",
+                    f"{gap.topic} temel tanım ve kurallarının kavranması.",
+                    "Derste çözülen adımların ve işlem önceliklerinin pekiştirilmesi.",
                 ],
                 questions=[
                     QuizQuestion(
-                        question="Bu aralıkta derste hangi konu anlatılıyordu?",
+                        question=f"'{gap.topic}' bölümünde vurgulanan temel ilke nedir?",
                         options=[
-                            f"A) {gap.topic}",
-                            "B) Dersin konusuyla ilgisi olmayan bir duyuru",
-                            "C) Bir önceki haftanın sınav sonuçları",
+                            "A) Temel kural ve formüllerin sırayla ve dikkatle uygulanması",
+                            "B) Sabit terimlerin katsayı gibi türeve dahil edilmesi",
+                            "C) Grafiğin x-keseninin doğrudan türev kabul edilmesi",
                         ],
                         correct_index=0,
-                        explanation=f"Odağın düştüğü {gap.start_time:.0f}.–{gap.end_time:.0f}. saniyeler arasında “{gap.topic}” anlatılıyordu.",
+                        explanation="Ders anlatımında kural adımlarının sistematik takibi vurgulanmıştır.",
                     ),
                     QuizQuestion(
-                        question="Öğretmen bu bölümde aşağıdakilerden hangisini söyledi?",
+                        question=f"Bu kural hangi tip fonksiyonel problemlerde uygulanır?",
                         options=[
-                            f"A) “{ilk}”",
-                            "B) “Bu konu sınavda çıkmayacak, not almanıza gerek yok.”",
-                            "C) “Bugünkü dersi burada bitiriyoruz.”",
+                            "A) Yalnızca trigonometrik denklemlerde",
+                            "B) Fonksiyonun anlık değişim oranını ve teğet eğimini analitik yolla bulmak için",
+                            "C) Sadece grafik çizimlerinde eksen belirlemek için",
                         ],
-                        correct_index=0,
-                        explanation="Bu cümle, kaçırdığın bölümün transkriptinde geçiyor. Devamını kartın altındaki transkriptten okuyabilirsin.",
+                        correct_index=1,
+                        explanation="Türev kuralları anlık değişim hızını ve teğet eğimini analitik olarak bulmamızı sağlar.",
                     ),
                 ],
             )
@@ -294,9 +288,7 @@ class LLMService:
     """Gemini ya da Claude ile çalışır; anahtar yoksa / çağrı başarısızsa Mock'a düşer."""
 
     # Gemini için sırayla denenecek modeller (ilki yoksa ya da kota dolduysa sonraki)
-    GEMINI_YEDEK_MODELLER = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash"]
-    GECICI_HATA = ("503", "429", "500", "unavailable", "overloaded", "high demand", "resource_exhausted",
-                   "deadline", "timeout", "timed out", "connection")
+    GEMINI_YEDEK_MODELLER = ["gemini-3.5-flash", "gemini-2.5-flash"]
 
     def __init__(self):
         self.config = settings.llm
@@ -325,25 +317,21 @@ class LLMService:
             modeller = [self.config.model] + [m for m in self.GEMINI_YEDEK_MODELLER if m != self.config.model]
             son_hata = None
             for model in modeller:
-                for bekle in (0, 1.5):  # yoğunluk / kota gibi geçici hatalarda bir kez daha dene
-                    time.sleep(bekle)
-                    try:
-                        yanit = self.client.models.generate_content(
-                            model=model,
-                            contents=user,
-                            config=types.GenerateContentConfig(
-                                system_instruction=system,
-                                response_mime_type="application/json",
-                                temperature=0.3,
-                            ),
-                        )
-                        self.active_model = model
-                        return yanit.text or ""
-                    except Exception as e:  # model yok / kota doldu -> sıradakini dene
-                        logger.warning(f"Gemini modeli {model} çalışmadı: {e}")
-                        son_hata = e
-                        if not any(k in str(e).lower() for k in self.GECICI_HATA):
-                            break
+                try:
+                    yanit = self.client.models.generate_content(
+                        model=model,
+                        contents=user,
+                        config=types.GenerateContentConfig(
+                            system_instruction=system,
+                            response_mime_type="application/json",
+                            temperature=0.3,
+                        ),
+                    )
+                    self.active_model = model
+                    return yanit.text
+                except Exception as e:  # model yok / kota doldu -> sıradakini dene
+                    logger.warning(f"Gemini modeli {model} çalışmadı: {e}")
+                    son_hata = e
             raise RuntimeError(f"Hiçbir Gemini modeli yanıt vermedi: {son_hata}")
 
         response = self.client.messages.create(
@@ -357,7 +345,7 @@ class LLMService:
 
     @staticmethod
     def _json(raw_text: str):
-        json_match = re.search(r"\{.*\}", raw_text or "", re.DOTALL)
+        json_match = re.search(r"\{.*\}", raw_text, re.DOTALL)
         return json.loads(json_match.group(0)) if json_match else None
 
     # ------------------------------------------------------------------ öğrenci kartı
@@ -379,8 +367,7 @@ class LLMService:
             if data:
                 # Zaman ve konu bilgisini modelden değil, ölçümden al
                 data.update(topic=gap.topic, gap_start=gap.start_time, gap_end=gap.end_time)
-                data["questions"] = [q for q in (data.get("questions") or []) if isinstance(q, dict)][:2]
-                data["key_points"] = [str(k) for k in (data.get("key_points") or [])]
+                data["questions"] = (data.get("questions") or [])[:2]
                 return RecoveryCard.model_validate(data)
             return MockLLMService.generate_recovery_card(gap)
         except Exception as e:

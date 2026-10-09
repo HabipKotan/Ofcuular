@@ -47,21 +47,3 @@ kayitlar/
 .idea/
 .DS_Store
 Thumbs.db
-
-# Ders kaydı geçici dosyaları
-kayit_durumu.json
-kayit_durumu.tmp
-kayit_durdur.flag
-ders.wav
-ders_yedek_*.wav
-tahta.json
-tahta.png
-kayit_gunlugu.txt
-notlar.json
-notlar.md
-transkript.json
-transkript.txt
-mikrofon_testi_*.wav
-tahtalar/
-paylasim.json
-transkript_bilgi.json

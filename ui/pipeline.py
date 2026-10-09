@@ -91,10 +91,6 @@ def run_student_pipeline(lecture: Lecture, threshold: float, force: bool = False
                 duration=lecture.duration, sample_rate_hz=settings.focus.sample_rate_hz
             ).collect()
         ss.focus_lecture_id = lecture.lecture_id
-        for k in [k for k in ss.keys() if str(k).startswith("quiz_") and not str(k).startswith("quiz_genel_")]:
-            del ss[k]  # önceki dersin kart cevapları
-        ss.pop("card_choice", None)
-        ss.pop("clicked_segment", None)
         ss.card_cache = {}
         ss.llm_chars_sent = 0
         ss.pop("threshold_used", None)
@@ -123,26 +119,6 @@ def run_student_pipeline(lecture: Lecture, threshold: float, force: bool = False
     # Eski seçim artık geçersizse sıfırla
     if ss.get("card_choice") is not None and ss.card_choice >= len(cards):
         ss.card_choice = 0 if cards else None
-
-
-def sinif_odagi(lecture: Lecture, threshold: float, kaynak: str = KAYNAK_DEMO) -> dict | None:
-    """Öğretmen paneli için sınıf odağı: ham + yumuşatılmış seri ve eşik altı aralıklar (LLM çağrısı yok).
-    Odak verisi yoksa None."""
-    ss = st.session_state
-    anahtar = (lecture.lecture_id, kaynak)
-    if ss.get("sinif_odak_anahtar") != anahtar:
-        if kaynak == KAYNAK_GERCEK:
-            ham = gercek_veri.gercek_odak()
-        else:
-            ham = SimulatedFocusSource(duration=lecture.duration,
-                                       sample_rate_hz=settings.focus.sample_rate_hz).collect()
-        ss.sinif_odak_ham, ss.sinif_odak_anahtar = ham, anahtar
-    ham = ss.sinif_odak_ham
-    if not ham:
-        return None
-    matcher = TimeSeriesMatcher(config=dataclasses.replace(settings.focus, threshold=threshold))
-    gaps, parts = group_gaps_by_segment(matcher.match_with_lecture(ham, lecture))
-    return {"raw": ham, "smooth": matcher.smooth_focus_samples(ham), "gaps": gaps, "parts": parts}
 
 
 def group_gaps_by_segment(gaps: List[GapWindow]) -> Tuple[List[GapWindow], List[Tuple[GapWindow, int]]]:
