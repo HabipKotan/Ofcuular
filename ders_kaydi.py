@@ -40,7 +40,7 @@ from core.dosya import guvenli_yaz  # noqa: E402
 try:
     from dotenv import load_dotenv
 
-    load_dotenv(PROJE / ".env")
+    load_dotenv(PROJE / ".env", override=True)  # .env değişince arayüzü kapatmadan yeni anahtar geçerli olsun
 except ImportError:
     pass
 

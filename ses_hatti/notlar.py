@@ -45,7 +45,7 @@ from google.genai import types
 try:  # arayüz projesindeki .env dosyasından GEMINI_API_KEY'i al
     from dotenv import load_dotenv
 
-    load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env"))
+    load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env"), override=True)
     load_dotenv()
 except ImportError:
     pass
