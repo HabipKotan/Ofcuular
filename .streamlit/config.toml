@@ -3,8 +3,17 @@ primaryColor = "#2F6FDE"
 base = "light"
 
 [browser]
-gatherUsageStats = false
+gatherUsageStats = false          # kullanım istatistiği Streamlit'e gönderilmez
 
 [server]
-# Yalnızca bu makineden erişim: öğrenci verisi cihazdan çıkmaz
+# Yalnızca bu makineden erişim: aynı Wi-Fi'deki başka cihazlar arayüze bağlanamaz, öğrenci verisi cihazdan çıkmaz
 address = "localhost"
+enableXsrfProtection = true       # başka sitelerden sahte form gönderimi engellenir
+enableCORS = true
+maxUploadSize = 10                # MB: yüz fotoğrafı yüklemesi için yeter; dev dosyayla sistemi kilitlemeyi önler
+maxMessageSize = 50
+runOnSave = false
+
+[client]
+toolbarMode = "viewer"            # "Deploy" ve geliştirici menüleri kullanıcıya görünmez
+showErrorDetails = "type"         # hata olursa kod satırları / dosya yolları ekrana dökülmez

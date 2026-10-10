@@ -13,6 +13,7 @@ açsa da aynı dersi görür. .env içinde OGRETMEN_SIFRESI tanımlıysa öğret
 
 from __future__ import annotations
 
+import html
 import os
 from types import SimpleNamespace
 
@@ -27,6 +28,7 @@ from ui import ders_kontrol  # noqa: E402
 from ui import gercek_veri  # noqa: E402
 from ui import ogrenci_kayit  # noqa: E402
 from core import ogrenci_db  # noqa: E402
+from core import guvenlik  # noqa: E402
 from ui import pipeline as pl  # noqa: E402
 from ui import tahta_bileseni  # noqa: E402
 
@@ -49,7 +51,7 @@ def rol_sec(rol: str | None) -> None:
 def baslik(alt: str, rol: str) -> None:
     st.markdown(f'<p class="app-title">🎓 Ders Asistanı <span style="font-weight:400;color:#6B7385">· '
                 f'{ROLLER[rol]}</span></p>', unsafe_allow_html=True)
-    st.markdown(f'<p class="app-sub">{alt}</p>', unsafe_allow_html=True)
+    st.markdown(f'<p class="app-sub">{html.escape(alt)}</p>', unsafe_allow_html=True)
 
 
 def yan_panel_rol(rol: str) -> None:
@@ -103,25 +105,114 @@ def giris_sayfasi() -> None:
 # ---------------------------------------------------------------------------
 # Öğretmen arayüzü
 # ---------------------------------------------------------------------------
+def _kilit_mesaji(kalan: int) -> None:
+    st.error(f"🔒 Çok fazla yanlış deneme. Güvenlik için giriş **{kalan} sn** kilitli. "
+             "(Her yeni kilitte süre iki katına çıkar.)")
+
+
 def ogretmen_sifre_kapisi() -> None:
-    sifre = (os.getenv("OGRETMEN_SIFRESI") or "").strip()
-    if not sifre or ss.get("ogretmen_giris"):
-        return
+    """Öğretmen arayüzü her zaman şifreli. Şifre yoksa ilk açılışta belirlenir."""
+    if ss.get("ogretmen_giris"):
+        if not guvenlik.oturum_suresi_doldu(ss, "ogretmen") or ders_kontrol.kayit_aktif():
+            return
+        ss.pop("ogretmen_giris", None)
+        guvenlik.gunluk("öğretmen oturumu zaman aşımıyla kapandı")
+        st.warning("Uzun süre işlem yapılmadığı için öğretmen oturumu kapatıldı. Yeniden giriş yapın.")
+
+    if not guvenlik.ogretmen_sifresi_var():
+        baslik("İlk kurulum: öğretmen şifresi", "ogretmen")
+        st.info("Öğretmen paneli ders kaydını, öğrenci kayıtlarını ve yüz verisini yönetir; bu yüzden şifresiz "
+                "açılmaz. Şimdi bir şifre belirleyin (en az 8 karakter, harf + rakam).")
+        with st.form("ogretmen_sifre_kur"):
+            s1 = st.text_input("Yeni şifre", type="password")
+            s2 = st.text_input("Yeni şifre (tekrar)", type="password")
+            if st.form_submit_button("Şifreyi kaydet", type="primary"):
+                hata = guvenlik.sifre_zayif_mi(s1) or (None if s1 == s2 else "İki şifre aynı değil.")
+                if hata:
+                    st.error(hata)
+                else:
+                    guvenlik.ogretmen_sifresi_belirle(s1)
+                    guvenlik.basarili("ogretmen", "ilk kurulum")
+                    ss.ogretmen_giris = True
+                    guvenlik.oturum_suresi_doldu(ss, "ogretmen")
+                    st.rerun()
+        st.stop()
+
     baslik("Öğretmen girişi", "ogretmen")
+    kalan = guvenlik.kilit_kalan("ogretmen")
     with st.form("ogretmen_giris_formu"):
-        girilen = st.text_input("Öğretmen şifresi", type="password")
-        if st.form_submit_button("Giriş yap", type="primary"):
-            if girilen == sifre:
+        girilen = st.text_input("Öğretmen şifresi", type="password", disabled=kalan > 0)
+        if st.form_submit_button("Giriş yap", type="primary", disabled=kalan > 0):
+            kalan = guvenlik.kilit_kalan("ogretmen")
+            if kalan:
+                pass
+            elif guvenlik.ogretmen_sifresi_dogru(girilen):
+                guvenlik.basarili("ogretmen")
                 ss.ogretmen_giris = True
+                guvenlik.oturum_suresi_doldu(ss, "ogretmen")
                 st.rerun()
-            st.error("Şifre yanlış.")
+            else:
+                kalan = guvenlik.basarisiz("ogretmen")
+                if not kalan:
+                    st.error("Şifre yanlış.")
+    if kalan:
+        _kilit_mesaji(kalan)
     if st.button("↩ Geri"):
         rol_sec(None)
     st.stop()
 
 
+def render_guvenlik_paneli() -> None:
+    """Öğretmen: güvenlik durumu, son olaylar, şifre değiştirme."""
+    with st.expander("🛡️ Güvenlik"):
+        liste = ogrenci_db.ogrenciler()
+        sifreli = sum(1 for o in liste if o.get("sifreli"))
+        yuzlu = sum(1 for o in liste if o["iz_sayisi"])
+        st.markdown(
+            f"- **Erişim:** yalnızca bu bilgisayardan (`localhost`); okul ağındaki başka cihazlar arayüze bağlanamaz.\n"
+            f"- **Şifreler:** öğretmen şifresi PBKDF2-SHA256, öğrenci şifreleri HMAC-SHA256 özeti olarak saklanır; "
+            f"düz metin şifre hiçbir yerde yok. {guvenlik.KILIT_ESIGI} yanlış denemede giriş kilitlenir.\n"
+            f"- **Yüz verisi:** fotoğraf saklanmaz; yüz izleri "
+            + (f"Windows DPAPI ile şifreli ({sifreli}/{yuzlu} öğrenci) — veritabanı çalınsa bile başka bilgisayarda açılmaz."
+               if guvenlik.sifreleme_acik() else "bu işletim sisteminde şifrelenmiyor (yalnızca Windows'ta).")
+            + f"\n- **Oturum:** {guvenlik.OTURUM_ZAMAN_ASIMI_SN // 60} dk hareketsiz kalan oturum kapanır.\n"
+            f"- **Yapay zekâya giden:** yalnızca öğretmenin konuşma metni ve sınıf ortalaması; öğrenci adı, yüz verisi "
+            f"veya kişisel odak hiçbir zaman dışarı gönderilmez.")
+        olaylar = guvenlik.son_olaylar(15)
+        if olaylar:
+            st.markdown("**Son güvenlik olayları**")
+            st.dataframe([{"Zaman": z.replace("T", " "), "Olay": o, "Ayrıntı": a} for z, o, a in olaylar],
+                         hide_index=True, width="stretch")
+        if not (os.getenv("OGRETMEN_SIFRESI") or "").strip():
+            with st.form("ogretmen_sifre_degistir"):
+                st.markdown("**Öğretmen şifresini değiştir**")
+                eski = st.text_input("Mevcut şifre", type="password")
+                yeni = st.text_input("Yeni şifre", type="password")
+                if st.form_submit_button("Değiştir"):
+                    if guvenlik.kilit_kalan("ogretmen"):
+                        _kilit_mesaji(guvenlik.kilit_kalan("ogretmen"))
+                    elif not guvenlik.ogretmen_sifresi_dogru(eski):
+                        guvenlik.basarisiz("ogretmen")
+                        st.error("Mevcut şifre yanlış.")
+                    elif guvenlik.sifre_zayif_mi(yeni):
+                        st.error(guvenlik.sifre_zayif_mi(yeni))
+                    else:
+                        guvenlik.ogretmen_sifresi_belirle(yeni)
+                        st.success("Şifre değiştirildi.")
+        if st.button("🚪 Öğretmen oturumunu kapat"):
+            ss.pop("ogretmen_giris", None)
+            guvenlik.gunluk("öğretmen çıkış yaptı")
+            st.rerun()
+
+
 def ogretmen_arayuzu() -> None:
     ogretmen_sifre_kapisi()
+    if not ss.get("_sifreleme_tamam"):
+        ss._sifreleme_tamam = True
+        try:
+            ogrenci_db.yuz_izlerini_sifrele()  # eski sürümden kalan şifresiz yüz izleri
+        except Exception as e:
+            st.toast(f"Yüz izleri şifrelenemedi: {e}")
     yan_panel_rol("ogretmen")
 
     # --- Yan panel: veri kaynağı ---
@@ -164,6 +255,7 @@ def ogretmen_arayuzu() -> None:
         return
     if d.get("durum") not in ders_kontrol.AKTIF:  # ders sürerken kayıt ekranı (ve tarayıcı kamerası) kapalı
         ogrenci_kayit.render_ogrenci_kayit()
+        render_guvenlik_paneli()
 
     bilgi = gercek_veri.ders_bilgisi() if gercek else {}
     if gercek and bilgi.get("ses_kaydedildi", True) and not bilgi.get("ders_algilandi", True):
@@ -231,7 +323,11 @@ def _paylasim_bekcisi() -> None:
 def ogrenci_giris_kapisi() -> None:
     """Kayıtlı öğrenci kendi şifresiyle girer (kişisel odak raporu); kayıtsız öğrenci şifresiz girer (sınıf ortalaması)."""
     if ss.get("ogrenci"):
-        return
+        if ss.ogrenci.get("misafir") or not guvenlik.oturum_suresi_doldu(ss, "ogrenci"):
+            return
+        ss.pop("ogrenci", None)
+        pl.wipe_student_data()
+        st.warning("Uzun süre işlem yapılmadığı için oturumun kapatıldı. Yeniden giriş yap.")
     baslik("Öğrenci girişi", "ogrenci")
     ui.render_privacy_strip()
     c1, c2 = st.columns(2, gap="large")
@@ -239,15 +335,25 @@ def ogrenci_giris_kapisi() -> None:
         with st.container(border=True):
             st.markdown("#### 🔑 Kayıtlı öğrenci")
             st.caption("Öğretmeninizin size verdiği şifreyle girin: ders notları + **kendi** odak raporunuz ve kartlarınız.")
+            kalan = guvenlik.kilit_kalan("ogrenci")
             with st.form("ogrenci_giris_formu"):
-                sifre = st.text_input("Şifre", type="password", placeholder="Örn. 7KQ-M3P")
-                if st.form_submit_button("Giriş yap", type="primary", width="stretch"):
-                    o = ogrenci_db.giris(sifre)
+                sifre = st.text_input("Şifre", type="password", placeholder="Örn. 7KQ-M3P", disabled=kalan > 0)
+                if st.form_submit_button("Giriş yap", type="primary", width="stretch", disabled=kalan > 0):
+                    kalan = guvenlik.kilit_kalan("ogrenci")
+                    o = None if kalan else ogrenci_db.giris(sifre)
                     if o:
+                        guvenlik.basarili("ogrenci", f"#{o['id']}")
                         pl.wipe_student_data()  # önceki öğrencinin oturum verisi kalmasın
                         ss.ogrenci = o
+                        guvenlik.oturum_suresi_doldu(ss, "ogrenci")
                         st.rerun()
-                    st.error("Şifre bulunamadı. Büyük/küçük harf ve tire önemli değil; öğretmeninizden kontrol etmesini isteyin.")
+                    elif not kalan:
+                        kalan = guvenlik.basarisiz("ogrenci")
+                        if not kalan:
+                            st.error("Şifre bulunamadı. Büyük/küçük harf ve tire önemli değil; öğretmeninizden "
+                                     "kontrol etmesini isteyin.")
+            if kalan:
+                _kilit_mesaji(kalan)
     with c2:
         with st.container(border=True):
             st.markdown("#### 👤 Kayıtsız öğrenci")

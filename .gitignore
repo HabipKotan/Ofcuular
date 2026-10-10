@@ -66,3 +66,12 @@ tahtalar/
 paylasim.json
 transkript_bilgi.json
 ogrenciler.db
+
+# Güvenlik: gizli anahtarlar ve kişisel veri asla depoya girmesin
+.env
+.env.*
+!.env.example
+*.db
+*.db-journal
+*.wav
+.streamlit/secrets.toml

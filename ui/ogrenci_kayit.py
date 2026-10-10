@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+import html
+
 import numpy as np
 import streamlit as st
 
@@ -78,8 +80,9 @@ def render_ogrenci_kayit() -> None:
             st.markdown("**Kayıtlı öğrenciler**")
             for o in liste:
                 c1, c2, c3 = st.columns([3, 1.2, 1])
-                c1.markdown(f"**{o['ad']}**  \n<span style='color:#6B7385;font-size:.85rem'>rıza: "
-                            f"{o['riza_zamani'][:16].replace('T', ' ')} · {o['iz_sayisi']} yüz örneği</span>",
+                c1.markdown(f"**{html.escape(o['ad'])}**  \n<span style='color:#6B7385;font-size:.85rem'>rıza: "
+                            f"{o['riza_zamani'][:16].replace('T', ' ')} · {o['iz_sayisi']} yüz örneği"
+                            f"{' · 🔒 şifreli' if o.get('sifreli') else ''}</span>",
                             unsafe_allow_html=True)
                 if c2.button("🔑 Yeni şifre", key=f"sifre_{o['id']}", width="stretch"):
                     ss.son_sifre = (o["ad"], ogrenci_db.sifre_yenile(o["id"]))

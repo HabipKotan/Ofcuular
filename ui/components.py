@@ -611,7 +611,7 @@ def render_card(idx: int, card: RecoveryCard, gap: GapWindow) -> None:
         top_l, top_r = st.columns([3, 1.3])
         with top_l:
             st.markdown(f"<span style='color:{col};font-weight:700'>■ Kart {idx + 1}</span> &nbsp; "
-                        f"<span style='font-size:1.15rem;font-weight:700'>{card.topic}</span>",
+                        f"<span style='font-size:1.15rem;font-weight:700'>{html.escape(card.topic)}</span>",
                         unsafe_allow_html=True)
             st.caption(f"Kaçırılan an: {fmt_t(gap.start_time)}–{fmt_t(gap.end_time)} · "
                        f"bölümün %{gap.coverage * 100:.0f}'ı · ortalama odak {gap.mean_focus:.0f}")

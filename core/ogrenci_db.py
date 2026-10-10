@@ -112,15 +112,19 @@ def ogrenci_ekle(ad: str, yuz_izleri: Optional[np.ndarray] = None) -> tuple[int,
         cur = db.execute(
             "INSERT INTO ogrenciler (ad, sifre_ozeti, yuz_izleri, iz_sayisi, riza_zamani, olusturma) "
             "VALUES (?, ?, ?, ?, ?, ?)",
-            (ad.strip(), _ozet(db, sifre), izler.tobytes() if len(izler) else None, len(izler), simdi, simdi))
-        return cur.lastrowid, sifre
+            (ad.strip(), _ozet(db, sifre), _guvenlik().sifrele(izler.tobytes()) if len(izler) else None,
+             len(izler), simdi, simdi))
+        oid = cur.lastrowid
+    _guvenlik().gunluk("öğrenci kaydedildi", f"#{oid} {ad.strip()} · {len(izler)} yüz örneği")
+    return oid, sifre
 
 
 def sifre_yenile(ogrenci_id: int) -> str:
     with _baglan() as db:
         sifre = _yeni_sifre(db)
         db.execute("UPDATE ogrenciler SET sifre_ozeti=? WHERE id=?", (_ozet(db, sifre), ogrenci_id))
-        return sifre
+    _guvenlik().gunluk("öğrenci şifresi yenilendi", f"#{ogrenci_id}")
+    return sifre
 
 
 def ogrenci_sil(ogrenci_id: int) -> None:
@@ -128,26 +132,63 @@ def ogrenci_sil(ogrenci_id: int) -> None:
     with _baglan() as db:
         db.execute("DELETE FROM kisisel_odak WHERE ogrenci_id=?", (ogrenci_id,))
         db.execute("DELETE FROM beklenenler WHERE ogrenci_id=?", (ogrenci_id,))
-        db.execute("DELETE FROM beklenenler WHERE ogrenci_id=?", (ogrenci_id,))
         db.execute("DELETE FROM ogrenciler WHERE id=?", (ogrenci_id,))
+    with _baglan() as db:
+        db.execute("VACUUM")  # silinen yüz izi dosyada iz bırakmasın
+    _guvenlik().gunluk("öğrenci ve tüm verisi silindi", f"#{ogrenci_id}")
+
+
+def _guvenlik():
+    from core import guvenlik
+    return guvenlik
 
 
 def ogrenciler() -> List[dict]:
     if not DB_YOLU.exists():
         return []
+    g = _guvenlik()
     with _baglan() as db:
-        return [dict(id=r["id"], ad=r["ad"], iz_sayisi=r["iz_sayisi"], riza_zamani=r["riza_zamani"])
-                for r in db.execute("SELECT id, ad, iz_sayisi, riza_zamani FROM ogrenciler ORDER BY ad")]
+        return [dict(id=r["id"], ad=r["ad"], iz_sayisi=r["iz_sayisi"], riza_zamani=r["riza_zamani"],
+                     sifreli=g.sifreli_mi(r["yuz_izleri"]))
+                for r in db.execute("SELECT id, ad, iz_sayisi, riza_zamani, yuz_izleri FROM ogrenciler ORDER BY ad")]
 
 
 def yuz_izleri() -> List[tuple[int, str, np.ndarray]]:
-    """Kamera tarafı için: [(id, ad, izler (k,128))]."""
+    """Kamera tarafı için: [(id, ad, izler (k,128))]. Şifreli izler burada, bellekte açılır."""
     if not DB_YOLU.exists():
         return []
+    g, sonuc = _guvenlik(), []
     with _baglan() as db:
-        return [(r["id"], r["ad"], np.frombuffer(r["yuz_izleri"], dtype=np.float32).reshape(-1, 128))
-                for r in db.execute("SELECT id, ad, yuz_izleri FROM ogrenciler "
-                                    "WHERE yuz_izleri IS NOT NULL AND iz_sayisi > 0")]
+        satirlar = list(db.execute("SELECT id, ad, yuz_izleri FROM ogrenciler "
+                                   "WHERE yuz_izleri IS NOT NULL AND iz_sayisi > 0"))
+    for r in satirlar:
+        try:
+            veri = g.coz(r["yuz_izleri"])
+            sonuc.append((r["id"], r["ad"], np.frombuffer(veri, dtype=np.float32).reshape(-1, 128)))
+        except Exception as e:  # ör. veritabanı başka bir bilgisayardan/kullanıcıdan kopyalandıysa
+            print(f"{r['ad']} için yüz izi açılamadı (başka bilgisayarda şifrelenmiş olabilir): {e}")
+    return sonuc
+
+
+def yuz_izlerini_sifrele() -> int:
+    """Eski sürümlerden kalan şifresiz yüz izlerini şifreler. Dönüş: şifrelenen öğrenci sayısı."""
+    g = _guvenlik()
+    if not DB_YOLU.exists() or not g.sifreleme_acik():
+        return 0
+    n = 0
+    with _baglan() as db:
+        for r in list(db.execute("SELECT id, yuz_izleri FROM ogrenciler WHERE yuz_izleri IS NOT NULL")):
+            if g.sifreli_mi(r["yuz_izleri"]):
+                continue
+            yeni = g.sifrele(r["yuz_izleri"])
+            if g.sifreli_mi(yeni):
+                db.execute("UPDATE ogrenciler SET yuz_izleri=? WHERE id=?", (yeni, r["id"]))
+                n += 1
+    if n:
+        with _baglan() as db:
+            db.execute("VACUUM")  # şifresiz eski kopya dosyada kalmasın
+        g.gunluk("eski yüz izleri şifrelendi", f"{n} öğrenci")
+    return n
 
 
 def giris(sifre: str) -> Optional[dict]:
