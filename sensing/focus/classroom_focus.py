@@ -43,6 +43,7 @@ import math
 import re
 import statistics
 import sys
+import os
 import time
 import urllib.request
 from collections import deque
@@ -66,6 +67,35 @@ NEDEN_ADLARI = {"yana": "yana bakma", "egik": "bas egik", "kapali": "goz kapali 
 #   CSV_KANCASI(csv_yolu): olcum dosyasinin yolu belli olunca cagrilir
 BASLANGIC_KANCASI = None
 DURDUR_DOSYASI: Path | None = None
+# Kamera ders ortasinda koparsa True olur (ders_kaydi.py sesi surdurur)
+KAMERA_KOPTU = False
+
+
+def kamera_ac(indeks: int, sessiz: bool = False):
+    """Kamerayi acar ve GERCEKTEN goruntu verdigini dogrular. Windows'ta farkli suruculeri (DirectShow,
+    Media Foundation) ve gerekirse diger kamera numaralarini dener. Olmazsa None."""
+    import cv2
+    suruculer = ([("DirectShow", cv2.CAP_DSHOW), ("MediaFoundation", cv2.CAP_MSMF)] if os.name == "nt" else [])
+    suruculer.append(("varsayilan", cv2.CAP_ANY))
+    for i in [indeks] + [n for n in (0, 1, 2) if n != indeks]:
+        for ad, surucu in suruculer:
+            kamera = cv2.VideoCapture(i, surucu)
+            if not kamera.isOpened():
+                kamera.release()
+                continue
+            bas = time.monotonic()
+            while time.monotonic() - bas < 3:  # bazi kameralar ilk karelerde bos doner (isinma)
+                tamam, _ = kamera.read()
+                if tamam:
+                    if not sessiz or i != indeks:
+                        print(f"Kamera acildi: {i} numara ({ad})"
+                              + ("" if i == indeks else f"  [istenen {indeks} numara goruntu vermedi]"))
+                    return kamera
+                time.sleep(0.1)
+            kamera.release()
+            if not sessiz:
+                print(f"Kamera {i} ({ad}) acildi ama goruntu vermedi.")
+    return None
 CSV_KANCASI = None
 #   KISI_KANCASI: rizali kisisel odak (sensing/focus/yuz_kimligi.KisiselTakip). Yalnizca KAYITLI ogrencileri
 #   tanir; digerlerinin yuz izi aninda atilir. None ise hicbir yuz tanima yapilmaz.
@@ -576,9 +606,12 @@ def calistir(args: argparse.Namespace) -> None:
         output_facial_transformation_matrixes=True,
     )
 
-    kamera = cv2.VideoCapture(args.kamera)
-    if not kamera.isOpened():
-        sys.exit(f"Kamera acilamadi (indeks {args.kamera}). --kamera 1 deneyin.")
+    global KAMERA_KOPTU
+    KAMERA_KOPTU = False
+    kamera = kamera_ac(args.kamera)
+    if kamera is None:
+        sys.exit("Kamera acilamadi ya da goruntu vermiyor. Kamerayi baska bir program (or. tarayicidaki "
+                 "kamera, Zoom/Teams, Kamera uygulamasi) kullaniyor olabilir; onu kapatip tekrar deneyin.")
 
     kok = dosya_koku(args.klasor, args.ders, datetime.now())
     csv_yol, olay_yol = Path(f"{kok}.csv"), Path(f"{kok}_olaylar.csv")
@@ -654,8 +687,22 @@ def calistir(args: argparse.Namespace) -> None:
                     break
                 tamam, kare = kamera.read()
                 if not tamam:
-                    print("Kameradan kare alinamadi, cikiliyor.")
-                    break
+                    # Anlik takilma olabilir: birkac saniye dene, olmazsa kamerayi yeniden ac
+                    bekle_bas = time.monotonic()
+                    while not tamam and time.monotonic() - bekle_bas < 3:
+                        time.sleep(0.1)
+                        tamam, kare = kamera.read()
+                    if not tamam:
+                        print("Kameradan kare gelmiyor; kamera yeniden aciliyor...")
+                        kamera.release()
+                        yeni = kamera_ac(args.kamera, sessiz=True)
+                        if yeni is not None:
+                            kamera = yeni
+                            tamam, kare = kamera.read()
+                    if not tamam:
+                        print("Kameradan kare alinamadi, kamera olcumu bitiyor.")
+                        KAMERA_KOPTU = True
+                        break
 
                 simdi = time.monotonic()
                 rgb = cv2.cvtColor(kare, cv2.COLOR_BGR2RGB)

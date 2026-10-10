@@ -103,8 +103,12 @@ def render_ogrenci_kayit() -> None:
 
         ornekler = ss.get("kayit_ornekler", [])
         if len(ornekler) < EN_COK_ORNEK:
-            foto = st.camera_input(f"Yüz örneği çek ({len(ornekler)}/{EN_COK_ORNEK}; en az {EN_AZ_ORNEK}, ideali 3-4)",
-                                   key=f"kayit_kamera_{n}_{len(ornekler)}")
+            # Tarayıcı kamerası yalnızca istenince açılır: açık kalırsa ders kaydı kameraya erişemez
+            kamera_acik = st.toggle("📷 Tarayıcı kamerasını aç", key=f"kayit_kamera_acik_{n}",
+                                    help="Fotoğraflar bitince kapatın. Kamera burada açıkken ders kaydı kamerayı "
+                                         "kullanamaz.")
+            foto = (st.camera_input(f"Yüz örneği çek ({len(ornekler)}/{EN_COK_ORNEK}; en az {EN_AZ_ORNEK}, ideali 3-4)",
+                                    key=f"kayit_kamera_{n}_{len(ornekler)}") if kamera_acik else None)
             if foto is not None:
                 ss.kayit_acik = True
                 _ornek_ekle(_coz(foto))

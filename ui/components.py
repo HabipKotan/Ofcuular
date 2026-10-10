@@ -62,6 +62,23 @@ table.ozet td:last-child {font-weight:600;}
 .rol-kart {border:1px solid rgba(128,128,128,.28); border-radius:16px; padding:1.4rem 1.5rem 1rem; height:100%;}
 .rol-kart h3 {margin:0 0 .4rem 0; font-size:1.25rem;}
 .rol-kart p {color:#6B7385; font-size:.93rem; line-height:1.5; margin:0 0 .8rem 0; min-height:4.4rem;}
+.odak-kutu {position:relative; display:inline-block; outline:none; cursor:help; padding-bottom:.2rem;}
+.odak-kutu .etiket {font-size:.875rem; color:var(--text-color); opacity:.85; margin-bottom:.15rem;}
+.odak-kutu .deger {font-size:2.25rem; line-height:1.15; font-weight:400; font-variant-numeric:tabular-nums;
+                   color:var(--text-color);}
+.odak-kutu .alt {font-size:.8rem; color:#6B7385; margin-top:.1rem;}
+.odak-kutu .alt b {color:#E5484D; font-weight:600;}
+.odak-kutu .ipucu {font-size:.75rem; color:#2F6FDE; margin-top:.15rem;}
+.odak-pop {display:none; position:absolute; z-index:1000; top:100%; margin-top:6px; width:470px; max-width:88vw;
+           background:#FFFFFF; color:#1F2A44; border:1px solid #D5DAE3; border-radius:12px;
+           box-shadow:0 10px 30px rgba(15,23,42,.18); padding:.7rem .8rem .6rem; font-size:.82rem; line-height:1.4;}
+.odak-pop.sag {right:0;} .odak-pop.sol {left:0;}
+.odak-kutu:hover .odak-pop, .odak-kutu:focus .odak-pop, .odak-kutu:focus-within .odak-pop {display:block;}
+.odak-pop img {display:block; width:100%; height:auto; margin:.25rem 0 .35rem;}
+.odak-pop .baslik {font-weight:700; font-size:.88rem;}
+.odak-pop .lejant span {display:inline-flex; align-items:center; gap:.3rem; margin-right:.8rem; color:#6B7385;}
+.odak-pop .lejant i {display:inline-block; width:14px; height:3px; border-radius:2px;}
+.odak-pop ul {margin:.3rem 0 0 1rem; padding:0;} .odak-pop li {margin:0;}
 </style>
 """
 
@@ -159,6 +176,79 @@ def _notes_to_markdown(notes: LectureNotes, lecture: Lecture) -> str:
     return "\n".join(out)
 
 
+# ---------------------------------------------------------------------------
+# "Odağın düştüğü süre" kutusu: üzerine gelince küçük odak grafiği açılır
+# ---------------------------------------------------------------------------
+def _odak_svg(smooth: List[FocusSample], threshold: float, araliklar, sure: float) -> str:
+    """Açılır pencere için küçük grafik (SVG). Renkler sabit: pencere her temada beyaz zeminli."""
+    W, H, sl, sg, ust, alt = 460, 170, 30, 8, 8, 22
+    gw, gh = W - sl - sg, H - ust - alt
+    son = max(sure or 0, smooth[-1].timestamp if smooth else 1, 1)
+    x = lambda t: sl + gw * max(0.0, min(1.0, t / son))
+    y = lambda v: ust + gh * (1 - max(0.0, min(100.0, v)) / 100)
+    p = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" '
+         f'font-family="Segoe UI, Arial, sans-serif" font-size="10">',
+         f'<rect x="0" y="0" width="{W}" height="{H}" fill="#FFFFFF"/>']
+    for v in (0, 50, 100):
+        p.append(f'<line x1="{sl}" x2="{W - sg}" y1="{y(v):.1f}" y2="{y(v):.1f}" stroke="#EEF0F4"/>')
+        p.append(f'<text x="{sl - 5}" y="{y(v) + 3:.1f}" text-anchor="end" fill="#8A93A6">{v}</text>')
+    for a, b, _ in araliklar:
+        p.append(f'<rect x="{x(a):.1f}" y="{ust}" width="{max(1.5, x(b) - x(a)):.1f}" height="{gh}" '
+                 f'fill="#E5484D" fill-opacity="0.16"/>')
+    p.append(f'<line x1="{sl}" x2="{W - sg}" y1="{y(threshold):.1f}" y2="{y(threshold):.1f}" '
+             f'stroke="#8A93A6" stroke-dasharray="4 3"/>')
+    p.append(f'<text x="{W - sg - 2}" y="{y(threshold) - 4:.1f}" text-anchor="end" fill="#8A93A6">eşik {threshold:.0f}</text>')
+    if smooth:
+        adim = max(1, len(smooth) // 400)  # uzun derslerde nokta sayısını azalt
+        noktalar = " ".join(f"{x(s.timestamp):.1f},{y(s.focus_score):.1f}" for s in smooth[::adim])
+        p.append(f'<polyline points="{noktalar}" fill="none" stroke="#2F6FDE" stroke-width="2" '
+                 f'stroke-linejoin="round" stroke-linecap="round"/>')
+    for t, anc in ((0, "start"), (son / 2, "middle"), (son, "end")):
+        p.append(f'<text x="{x(t):.1f}" y="{H - 6}" text-anchor="{anc}" fill="#8A93A6">{fmt_t(t)}</text>')
+    p.append("</svg>")
+    return "".join(p)
+
+
+def odak_dusus_kutusu(baslik: str, smooth: List[FocusSample], threshold: float, sure: float,
+                      kim: str = "Sınıfın", hizala: str = "sag") -> None:
+    """st.metric yerine: değer + altında kısa özet; fareyle üzerine gelince (dokunmatikte dokununca)
+    ders boyunca odak grafiği açılır, eşik altı anlar kırmızı gölgeli."""
+    import base64
+    from ui.pipeline import dusuk_odak
+
+    d = dusuk_odak(smooth, threshold)
+    toplam, araliklar = d["toplam_s"], d["araliklar"]
+    oran = 100 * toplam / sure if sure else 0
+    if araliklar:
+        alt = f"<b>{len(araliklar)} kez</b> düştü · ders süresinin %{oran:.0f}"
+    else:
+        alt = "eşiğin altına hiç düşmedi"
+    svg = base64.b64encode(_odak_svg(smooth, threshold, araliklar, sure).encode()).decode()
+    if araliklar:
+        en = d["en_uzun"]
+        sirali = sorted(araliklar, key=lambda a: a[1] - a[0], reverse=True)[:4]
+        liste = "<ul>" + "".join(f"<li>{fmt_t(a)}–{fmt_t(b)} · {fmt_t(b - a)} (en düşük {m:.0f})</li>"
+                                 for a, b, m in sorted(sirali)) + "</ul>"
+        ozet = (f"{kim} odağı ders boyunca toplam <b>{fmt_t(toplam)}</b> eşiğin ({threshold:.0f}) altında kaldı. "
+                f"En uzun düşüş: <b>{fmt_t(en[1] - en[0])}</b> ({fmt_t(en[0])}–{fmt_t(en[1])}).")
+    else:
+        liste, ozet = "", f"{kim} odağı ders boyunca eşiğin ({threshold:.0f}) üstünde kaldı."
+    st.markdown(
+        f"<div class='odak-kutu' tabindex='0'>"
+        f"<div class='etiket'>{html.escape(baslik)}</div>"
+        f"<div class='deger'>{fmt_t(toplam)}</div>"
+        f"<div class='alt'>{alt}</div>"
+        f"<div class='ipucu'>📈 grafik için üzerine gelin</div>"
+        f"<div class='odak-pop {hizala}'>"
+        f"<div class='baslik'>Ders boyunca odak</div>"
+        f"<img alt='Ders boyunca odak grafiği' src='data:image/svg+xml;base64,{svg}'>"
+        f"<div class='lejant'><span><i style='background:#2F6FDE'></i>odak</span>"
+        f"<span><i style='background:#E5484D;opacity:.45;height:8px'></i>eşik altı</span>"
+        f"<span><i style='background:#8A93A6'></i>eşik</span></div>"
+        f"<div style='margin-top:.35rem'>{ozet}</div>{liste}"
+        f"</div></div>", unsafe_allow_html=True)
+
+
 def render_ders_ozeti(lecture: Lecture, bilgi: dict, odak: Optional[dict], threshold: float) -> None:
     """Öğretmen: ders sonu özet tablosu (öğrenci sayısı dahil) + sınıf odağı grafiği.
 
@@ -168,7 +258,6 @@ def render_ders_ozeti(lecture: Lecture, bilgi: dict, odak: Optional[dict], thres
     st.markdown("#### 📊 Ders özeti")
     odak_var = bool(odak and odak.get("raw"))
     ort = (sum(s.focus_score for s in odak["raw"]) / len(odak["raw"])) if odak_var else None
-    dusuk_sn = sum(g.duration for g, _ in odak["parts"]) if odak_var else 0.0
 
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Öğrenci sayısı", bilgi.get("ogrenci_sayisi") or "—",
@@ -176,7 +265,11 @@ def render_ders_ozeti(lecture: Lecture, bilgi: dict, odak: Optional[dict], thres
                    "Kimlik tespiti yapılmaz; yalnızca sayılır.")
     m2.metric("Ders süresi", fmt_t(lecture.duration))
     m3.metric("Sınıf odak ortalaması", f"{ort:.0f}/100" if ort is not None else "—")
-    m4.metric("Odağın düştüğü süre", fmt_t(dusuk_sn) if odak_var else "—")
+    if odak_var:
+        with m4:
+            odak_dusus_kutusu("Odağın düştüğü süre", odak["smooth"], threshold, lecture.duration, "Sınıfın", "sag")
+    else:
+        m4.metric("Odağın düştüğü süre", "—")
 
     satirlar = [("Ders adı", lecture.title)]
     if bilgi.get("zaman"):
@@ -547,7 +640,9 @@ def render_student_view(lecture: Lecture, raw: List[FocusSample], smooth: List[F
 
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Ortalama odak", f"{stats['mean']:.0f}/100")
-    m2.metric("Kaçırılan süre", fmt_t(stats["missed_s"]))
+    with m2:
+        odak_dusus_kutusu("Kaçırılan süre", smooth, threshold, lecture.duration,
+                          "Senin" if ss.get("focus_durum") == "kisisel" else "Sınıfın", "sol")
     m3.metric("Eksik Tamamlama Kartı", stats["n_gaps"])
     m4.metric("Pekiştirme", f"{correct}/{total} doğru" if total else "—",
               delta=f"{answered}/{total} yanıtlandı" if total else None, delta_color="off")

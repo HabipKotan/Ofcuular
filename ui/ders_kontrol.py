@@ -196,6 +196,8 @@ def _canli_durum() -> None:
         elif c2.button("⏹ Dersi Bitir", type="primary", width="stretch"):
             DURDUR.touch()
             st.rerun(scope="app")  # tahta son halini hemen kaydetsin
+        if d.get("uyari"):
+            st.warning("📷 " + d["uyari"])
         if ses:
             seviye = float(d.get("ses_seviyesi") or 0)
             st.progress(min(1.0, seviye * 8), text=f"🎙️ Mikrofon: {d.get('mikrofon') or '?'}")

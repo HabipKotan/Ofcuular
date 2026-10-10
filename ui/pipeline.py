@@ -202,11 +202,47 @@ def wipe_student_data() -> None:
             del st.session_state[k]
 
 
+def dusuk_odak(smooth: List[FocusSample], threshold: float) -> dict:
+    """Yumuşatılmış odağın eşiğin altında kaldığı TOPLAM süre ve aralıklar.
+    (Kartlardan bağımsız: kısa düşüşler ve konu bölümü bulunamayan anlar da sayılır.)"""
+    if not smooth:
+        return {"toplam_s": 0.0, "araliklar": [], "en_uzun": None}
+    ts = [s.timestamp for s in smooth]
+    farklar = sorted(b - a for a, b in zip(ts, ts[1:]) if b > a)
+    dt = farklar[len(farklar) // 2] if farklar else 1.0
+    araliklar, bas, en_dusuk = [], None, 100.0
+    for i, s in enumerate(smooth):
+        if s.focus_score < threshold:
+            if bas is None:
+                bas, en_dusuk = s.timestamp, s.focus_score
+            en_dusuk = min(en_dusuk, s.focus_score)
+            son = s.timestamp
+        elif bas is not None:
+            araliklar.append((bas, son + dt, en_dusuk))
+            bas = None
+    if bas is not None:
+        araliklar.append((bas, son + dt, en_dusuk))
+    toplam = sum(b - a for a, b, _ in araliklar)  # toplam süre: her eşik altı an sayılır
+    # Sayım/liste için eşiğin etrafında gidip gelen kısa kopuklukları (< 6 sn arayla) tek düşüş say
+    birlesik = []
+    for a, b, m in araliklar:
+        if birlesik and a - birlesik[-1][1] < 6:
+            birlesik[-1] = (birlesik[-1][0], b, min(birlesik[-1][2], m))
+        else:
+            birlesik.append((a, b, m))
+    araliklar = birlesik
+    return {"toplam_s": toplam, "araliklar": araliklar,
+            "en_uzun": max(araliklar, key=lambda a: a[1] - a[0]) if araliklar else None}
+
+
 def focus_stats(raw: List[FocusSample], gaps: List[GapWindow],
-                parts: List[Tuple[GapWindow, int]]) -> dict:
+                parts: List[Tuple[GapWindow, int]], smooth: List[FocusSample] | None = None,
+                threshold: float | None = None) -> dict:
     scores = [s.focus_score for s in raw]
+    missed = (dusuk_odak(smooth, threshold)["toplam_s"] if smooth and threshold is not None
+              else sum(g.duration for g, _ in parts))
     return {
         "mean": sum(scores) / len(scores) if scores else 0.0,
-        "missed_s": sum(g.duration for g, _ in parts),  # gerçek düşüş süreleri
+        "missed_s": missed,  # odağın eşik altında kaldığı toplam süre
         "n_gaps": len(gaps),
     }

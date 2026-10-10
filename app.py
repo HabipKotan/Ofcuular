@@ -162,7 +162,8 @@ def ogretmen_arayuzu() -> None:
         # Ders sürüyor: sayfa = kayıt kutusu + tahta (tahta otomatik kaydedilir, arşiv arayüzde gösterilmez)
         tahta_bileseni.ders_tahtasi(d)
         return
-    ogrenci_kayit.render_ogrenci_kayit()
+    if d.get("durum") not in ders_kontrol.AKTIF:  # ders sürerken kayıt ekranı (ve tarayıcı kamerası) kapalı
+        ogrenci_kayit.render_ogrenci_kayit()
 
     bilgi = gercek_veri.ders_bilgisi() if gercek else {}
     if gercek and bilgi.get("ses_kaydedildi", True) and not bilgi.get("ders_algilandi", True):
@@ -386,7 +387,7 @@ def ogrenci_arayuzu() -> None:
                 elif gercek:
                     st.info("Bu derste senin için kişisel ölçüm yok (ders, yüz kaydından önce yapılmış olabilir). "
                             "Aşağıda **sınıfın ortalama** odağı ve buna göre hazırlanan kartlar gösteriliyor.")
-                stats = pl.focus_stats(ss.focus_raw, ss.gaps, ss.gap_parts)
+                stats = pl.focus_stats(ss.focus_raw, ss.gaps, ss.gap_parts, ss.focus_smooth, threshold)
                 ui.render_student_view(lecture, ss.focus_raw, ss.focus_smooth, ss.gaps, ss.gap_parts, ss.cards,
                                        threshold, stats)
 

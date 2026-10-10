@@ -294,7 +294,7 @@ def main() -> None:
         pass
     hazirlanan = " ve ".join(x for x, acik in (("Kamera", odak_var), ("mikrofon", ses_var)) if acik)
     durum_yaz(durum="baslatiliyor", mesaj=f"{hazirlanan} hazırlanıyor…", konu=args.konu, ses=ses_var, odak=odak_var,
-              pid=os.getpid(), baslangic=None, odak_csv=None, mikrofon=None, ses_seviyesi=None)
+              pid=os.getpid(), baslangic=None, uyari=None, odak_csv=None, mikrofon=None, ses_seviyesi=None)
     threading.Thread(target=nabiz, daemon=True).start()
 
     kamera_modulu = None
@@ -368,6 +368,20 @@ def main() -> None:
             sys.argv = kamera_argv
             try:
                 kamera_modulu.main()
+            except SystemExit as e:  # kamera hiç açılamadı
+                if not ses_var or (_durum.get("durum") == "kayit"):
+                    raise
+                print(f"UYARI: {e}\nDers yalnızca SESLE kaydediliyor (sınıf odağı ölçülmeyecek).")
+                odak_var = False
+                durum_yaz(odak=False, uyari="Kamera açılamadı (başka bir program kullanıyor olabilir). "
+                                            "Ders yalnızca sesle kaydediliyor; notlar yine hazırlanacak.")
+                kayit_basladi()
+                durdurulana_kadar_bekle()
+            else:
+                if kamera_modulu.KAMERA_KOPTU and ses_var and not DURDUR.exists():
+                    durum_yaz(uyari="Kamera bağlantısı koptu. Ses kaydı sürüyor; odak ölçümü kopana kadarki "
+                                    "kısımla sınırlı kalacak.")
+                    durdurulana_kadar_bekle()
             finally:
                 sys.argv = eski_argv
         else:
