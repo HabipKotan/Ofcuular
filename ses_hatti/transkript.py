@@ -30,9 +30,10 @@ import time
 
 import av
 import numpy as np
-from faster_whisper import WhisperModel
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(1, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from core import model_yukle  # noqa: E402  (Türkçe karakterli yollara karşı korumalı model yükleme)
 
 try:  # arayüz projesindeki .env dosyasından WHISPER_MODEL / WHISPER_LANGUAGE al
     from dotenv import load_dotenv
@@ -83,7 +84,9 @@ def konu_ipucu(konu: str | None) -> str:
 
 def sesi_oku(yol: str) -> np.ndarray:
     """Ses dosyasını 16 kHz mono float32 diziye çevirir (PyAV sürüm uyumsuzluğunu atlar)."""
-    kap = av.open(yol)
+    # Dosyayı Python açar, PyAV'ye dosya nesnesi verilir: yolda Türkçe karakter olsa da sorun çıkmaz
+    dosya = open(yol, "rb")
+    kap = av.open(dosya)
     donusturucu = av.AudioResampler(format="s16", layout="mono", rate=16000)
     parcalar = []
     for kare in kap.decode(audio=0):
@@ -92,6 +95,7 @@ def sesi_oku(yol: str) -> np.ndarray:
     for k in donusturucu.resample(None):  # kalanları boşalt
         parcalar.append(k.to_ndarray().reshape(-1))
     kap.close()
+    dosya.close()
     if not parcalar:
         return np.zeros(0, dtype=np.float32)
     return np.concatenate(parcalar).astype(np.float32) / 32768.0
@@ -182,7 +186,8 @@ def main():
         print("Ses dosyası boş ya da çok kısa; metne çevrilecek bir şey yok.")
     else:
         print(f"Model yükleniyor ({MODEL_BOYUTU})... İlk çalıştırmada model indirilir, biraz sürebilir.")
-        model = WhisperModel(MODEL_BOYUTU, device="cpu", compute_type="int8")
+        # Kullanıcı klasöründe Türkçe karakter varsa (ör. C:/Users/Öğretmen) model İngilizce karakterli klasöre iner
+        model = model_yukle.whisper_modeli(MODEL_BOYUTU, device="cpu", compute_type="int8")
         print("Metne çevriliyor...")
         ayarlar = dict(
             language=DIL,

@@ -28,6 +28,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 import wave
 from datetime import datetime
 from pathlib import Path
@@ -364,19 +365,38 @@ def main() -> None:
                 kamera_argv += ["--ders", args.konu]
             if args.yuz_goster:
                 kamera_argv.append("--yuz-goster")
+            # Önizleme penceresi: varsayılan küçük (tam ekran tahtayı kapatmasın). .env: KAMERA_ONIZLEME=kucuk|normal|kapali
+            onizleme = (os.getenv("KAMERA_ONIZLEME") or "kucuk").strip().lower()
+            if onizleme == "kapali":
+                kamera_argv.append("--onizleme-yok")
+            elif onizleme.isdigit():
+                kamera_argv += ["--onizleme-genislik", onizleme]
+            elif onizleme != "normal":
+                kamera_argv += ["--onizleme-genislik", "360"]
             eski_argv = sys.argv
             sys.argv = kamera_argv
             try:
                 kamera_modulu.main()
-            except SystemExit as e:  # kamera hiç açılamadı
-                if not ses_var or (_durum.get("durum") == "kayit"):
+            except (Exception, SystemExit) as e:
+                # Kamera açılamadı ya da görüntü modeli hata verdi. Ses açıksa ders KAYBOLMAZ: yalnızca sesle sürer.
+                # (Önceden yalnızca "kamera açılamadı" durumu yakalanıyordu; model hatası bütün dersi çökertiyordu.)
+                if not ses_var:
                     raise
-                print(f"UYARI: {e}\nDers yalnızca SESLE kaydediliyor (sınıf odağı ölçülmeyecek).")
-                odak_var = False
-                durum_yaz(odak=False, uyari="Kamera açılamadı (başka bir program kullanıyor olabilir). "
-                                            "Ders yalnızca sesle kaydediliyor; notlar yine hazırlanacak.")
-                kayit_basladi()
-                durdurulana_kadar_bekle()
+                kayit_suruyordu = _durum.get("durum") == "kayit"
+                print(f"UYARI: görüntü tarafı durdu ({e}). Ders yalnızca SESLE sürüyor.")
+                if not isinstance(e, SystemExit):
+                    traceback.print_exc()
+                if kayit_suruyordu:  # ders ortasında çöktü: o ana kadarki odak ölçümü korunur
+                    durum_yaz(uyari="Sınıf odağı ölçümü bir hata nedeniyle durdu. Ses kaydı sürüyor; "
+                                    "notlar yine hazırlanacak.")
+                else:
+                    odak_var = False
+                    neden = ("Kamera açılamadı (başka bir program kullanıyor olabilir)" if isinstance(e, SystemExit)
+                             else f"Görüntü modeli başlatılamadı ({str(e)[:140]})")
+                    durum_yaz(odak=False, uyari=f"{neden}. Ders yalnızca sesle kaydediliyor; notlar yine hazırlanacak.")
+                    kayit_basladi()
+                if not DURDUR.exists():
+                    durdurulana_kadar_bekle()
             else:
                 if kamera_modulu.KAMERA_KOPTU and ses_var and not DURDUR.exists():
                     durum_yaz(uyari="Kamera bağlantısı koptu. Ses kaydı sürüyor; odak ölçümü kopana kadarki "
@@ -421,7 +441,6 @@ def main() -> None:
                 pass
         durum_yaz(durum="hata", mesaj=str(e) or e.__class__.__name__)
         print(f"HATA: {e}")
-        import traceback
         traceback.print_exc()
         sys.exit(1)
     finally:
@@ -431,7 +450,6 @@ def main() -> None:
 def _guvenli_calistir() -> None:
     """Beklenmeyen her hatada (içe aktarma hatası, Ctrl+C, kapanan pencere…) durumu 'hata' yap ve
     ayrıntıyı günlüğe yaz; böylece panel "yanıt vermiyor"da kalmaz, sebebi gösterir."""
-    import traceback
 
     try:
         main()

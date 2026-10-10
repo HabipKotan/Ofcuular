@@ -11,7 +11,7 @@ address = "localhost"
 enableXsrfProtection = true       # başka sitelerden sahte form gönderimi engellenir
 enableCORS = true
 maxUploadSize = 10                # MB: yüz fotoğrafı yüklemesi için yeter; dev dosyayla sistemi kilitlemeyi önler
-maxMessageSize = 50
+maxMessageSize = 100               # MB: slaytlı tahta resmi ve PDF'e çevrilen sunumlar için pay
 runOnSave = false
 
 [client]

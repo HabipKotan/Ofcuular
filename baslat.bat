@@ -6,6 +6,12 @@ setlocal
 chcp 65001 >nul
 cd /d "%~dp0"
 
+rem OneDrive klasoru: senkronizasyon dosyalari kilitleyebilir ve .venv cok yavas kurulur
+echo "%~dp0" | find /i "OneDrive" >nul && (
+  echo [UYARI] Proje bir OneDrive klasorunde. Senkronizasyon kayit dosyalarini kilitleyebilir.
+  echo         Sorun yasarsaniz klasoru C:\DersAsistani gibi bir yere tasiyin.
+)
+
 set "PY=python"
 where python >nul 2>nul || set "PY=py -3"
 %PY% --version >nul 2>nul

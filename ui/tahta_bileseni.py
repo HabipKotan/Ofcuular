@@ -1,8 +1,8 @@
 """
 Tahta defteri (arkadaşımızın ders_defteri.html'i) arayüzün içinde.
 
-ÖĞRETMEN PANELİNDE (ders_tahtasi): "Dersi Başlat" ile kayıt başlayınca tahta açılır, her ders BOŞ bir
-sayfayla başlar. Tahta yazıldıkça birkaç saniyede bir otomatik kaydedilir; ders bitince son hali yazılır ve
+ÖĞRETMEN PANELİNDE (ders_tahtasi): "Dersi Başlat" ile kayıt başlayınca tahta TAM EKRAN açılır, her ders BOŞ bir
+sayfayla başlar. Tahtaya PDF / PowerPoint / Word / resim sürüklenip bırakılabilir; sayfaların üzerine yazılır. Tahta yazıldıkça birkaç saniyede bir otomatik kaydedilir; ders bitince son hali yazılır ve
 tahta kaybolur. Kaydedilen sayfalar arayüzde gösterilmez; defter sayfaları gibi klasörde birikir:
     <kalıcı klasör veya proje>/tahtalar/<tarih_saat>_<ders>.png / .json
 
@@ -124,26 +124,96 @@ def sayfa_kaydet(olay: dict) -> Path:
     return resim
 
 
+# Ders sürerken tahta bütün pencereyi kaplar. Streamlit'in kendi başlığı ve yan paneli gizlenir; tahtanın
+# "Küçült" düğmesi bu kuralları kaldırır. (Tarayıcının gerçek tam ekranını tahta, ilk dokunuşta kendisi ister.)
+_TAM_EKRAN_CSS = """<style>
+.st-key-tahta_kutu iframe {
+    position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important;
+    height: 100dvh !important; max-width: none !important; z-index: 1000100 !important; border: 0 !important;
+    background: #f1efe9; opacity: 1 !important; transition: none !important;
+}
+.st-key-tahta_kutu, .st-key-tahta_kutu * { opacity: 1 !important; }
+header[data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"],
+[data-testid="stToolbar"], [data-testid="stDecoration"] { display: none !important; }
+@media (prefers-color-scheme: dark) { .st-key-tahta_kutu iframe { background: #111110; } }
+</style>"""
+_NORMAL_CSS = "<style>.st-key-tahta_kutu iframe { border: 0; }</style>"
+
+
+def _belge_donustur(olay: dict) -> dict:
+    """Tahtaya bırakılan PowerPoint / Word dosyasını PDF'e çevirir; yanıt tahtaya args.belge ile gider."""
+    from core import belge_donustur
+
+    istek = str(olay.get("istek") or "")
+    ad = str(olay.get("ad") or "belge")
+    try:
+        veri = base64.b64decode(olay.get("veri") or "")
+        pdf = belge_donustur.pdfe_cevir(veri, ad)
+        return {"istek": istek, "ad": ad, "pdf": base64.b64encode(pdf).decode("ascii")}
+    except belge_donustur.DonusturmeHatasi as e:
+        return {"istek": istek, "hata": str(e)}
+    except Exception as e:  # beklenmeyen hata da tahtaya anlaşılır biçimde dönsün
+        return {"istek": istek, "hata": f"Dosya PDF'e çevrilemedi ({e}). {belge_donustur.PDF_OLARAK_KAYDET}"}
+
+
+def _ders_olayi(olay, kimlik: str) -> None:
+    """Tahtadan gelen olayı işler. 'kaydet' sessizce diske yazılır; kontrol olayları (bitir, tam ekran, belge)
+    bir kez işlenir, zamanı args.onay ile tahtaya geri bildirilir ve sayfa yeniden çizilir."""
+    ss = st.session_state
+    if not isinstance(olay, dict) or str(olay.get("kimlik")) != kimlik:
+        return
+    tur = olay.get("olay")
+    if tur == "kaydet":
+        if ss.get("tahta_son_kayit") != olay.get("zaman"):
+            try:
+                sayfa_kaydet(olay)
+                ss.tahta_son_kayit = olay.get("zaman")
+                ss.tahta_son_kayit_saati = (kimlik, datetime.now().strftime("%H:%M:%S"))
+            except Exception as e:
+                st.warning(f"Tahta kaydedilemedi: {e}")
+        return
+    zaman = olay.get("zaman")
+    if zaman is None or ss.get("tahta_son_kontrol") == zaman:
+        return  # aynı olay her yeniden çizimde tekrar gelir; yalnızca bir kez işlenir
+    ss.tahta_son_kontrol = zaman
+    if tur == "bitir":
+        if olay.get("png"):
+            try:
+                sayfa_kaydet(olay)  # tahtanın son hali
+            except Exception as e:
+                st.warning(f"Tahta kaydedilemedi: {e}")
+        ders_kontrol.DURDUR.touch()
+    elif tur == "tam_ekran":
+        ss.setdefault("tahta_tam_ekran", {})[kimlik] = bool(olay.get("acik"))
+    elif tur == "belge_donustur":
+        ss.tahta_belge = _belge_donustur(olay)
+    elif tur == "belge_alindi":
+        if (ss.get("tahta_belge") or {}).get("istek") == olay.get("istek"):
+            ss.pop("tahta_belge", None)  # büyük PDF yanıtı her yeniden çizimde tekrar gönderilmesin
+    st.rerun()
+
+
 def ders_tahtasi(d: dict, yukseklik: int = 760) -> None:
-    """Kayıt sürerken tahtayı gösterir ve gelen otomatik kayıtları diske yazar."""
+    """Kayıt sürerken tahtayı gösterir (varsayılan: tam ekran) ve tahtadan gelen olayları işler."""
     ss = st.session_state
     kimlik = f"{d.get('pid') or 0}_{int(d.get('baslangic') or 0)}"
     bitiyor = ders_kontrol.DURDUR.exists()
+    tam = ss.setdefault("tahta_tam_ekran", {}).setdefault(kimlik, True)  # her ders tam ekran başlar
+
+    # Öğe sayısı ve sırası iki modda da AYNI kalmalı; yoksa Streamlit tahtayı baştan yükler.
+    st.markdown(_TAM_EKRAN_CSS if tam else _NORMAL_CSS, unsafe_allow_html=True)
     st.markdown("#### 🖊️ Tahta")
-    olay = _bilesen(yukseklik=yukseklik, kimlik=kimlik, konu=d.get("konu") or "", bitiyor=bitiyor,
-                    key="ders_tahtasi", default=None)
-    if (isinstance(olay, dict) and olay.get("olay") == "kaydet" and olay.get("kimlik") == kimlik
-            and ss.get("tahta_son_kayit") != olay.get("zaman")):
-        try:
-            sayfa_kaydet(olay)
-            ss.tahta_son_kayit = olay.get("zaman")
-            ss.tahta_son_kayit_saati = (kimlik, datetime.now().strftime("%H:%M:%S"))
-        except Exception as e:
-            st.warning(f"Tahta kaydedilemedi: {e}")
+    with st.container(key="tahta_kutu"):
+        olay = _bilesen(yukseklik=yukseklik, kimlik=kimlik, konu=d.get("konu") or "", bitiyor=bitiyor,
+                        tam_ekran=tam, onay=ss.get("tahta_son_kontrol"), belge=ss.get("tahta_belge"),
+                        uyari=ss.get("tahta_uyari"), key="ders_tahtasi", default=None)
+    _ders_olayi(olay, kimlik)
     k, son = ss.get("tahta_son_kayit_saati") or (None, None)
     son = son if k == kimlik else None
     st.caption("Her ders boş bir tahtayla başlar ve yazdıkça otomatik kaydedilir"
-               + (f" · son kayıt {son}" if son else "") + ". Ders bitince tahta bu dersin sayfası olarak saklanır.")
+               + (f" · son kayıt {son}" if son else "")
+               + ". PDF, PowerPoint ya da Word dosyasını tahtaya sürükleyip üzerine yazabilirsiniz. "
+                 "Tam ekrana dönmek için tahtadaki **Tam ekran** düğmesine basın.")
 
 
 def render_tahta_sekmesi() -> None:

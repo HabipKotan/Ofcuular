@@ -79,6 +79,8 @@ def _surec_baslat(ek_argumanlar: list[str], ilk_durum: dict) -> None:
 
 
 def _baslat(konu: str, ses: bool = True, odak: bool = True, sesi_sakla: bool = False) -> None:
+    for anahtar in ("tahta_uyari", "_sessiz_bas", "tahta_belge"):  # önceki dersten kalanlar
+        st.session_state.pop(anahtar, None)
     arg = ["--konu", konu.strip()]
     if not ses:
         arg.append("--ses-yok")
@@ -147,6 +149,23 @@ def _baslat_penceresi(konu: str, sesi_sakla: bool) -> None:
         st.rerun()
 
 
+def _tahta_uyarisi(d: dict, ses: bool, gecen: float) -> str | None:
+    """Tam ekran tahtanın üst çubuğunda görünecek kısa uyarı: kamera sorunu ya da uzun süre ses gelmemesi.
+    (Tahta tam ekranken bu paneldeki uyarılar görünmez.)"""
+    ss = st.session_state
+    parcalar = []
+    if d.get("uyari"):
+        parcalar.append("📷 " + d["uyari"])
+    if ses:
+        if float(d.get("ses_seviyesi") or 0) < 0.004 and gecen > 6:
+            ss.setdefault("_sessiz_bas", time.time())
+        else:
+            ss.pop("_sessiz_bas", None)
+        if time.time() - ss.get("_sessiz_bas", time.time()) >= 20:
+            parcalar.append("🎙️ Mikrofon 20 sn'dir ses almıyor; mikrofonu kontrol edin.")
+    return "  ".join(parcalar) or None
+
+
 # ---------------------------------------------------------------------------
 # Canlı durum (2 sn'de bir yenilenir)
 # ---------------------------------------------------------------------------
@@ -185,6 +204,10 @@ def _canli_durum() -> None:
 
     if durum == "kayit":
         gecen = time.time() - (d.get("baslangic") or time.time())
+        uyari = _tahta_uyarisi(d, ses, gecen)
+        if uyari != st.session_state.get("tahta_uyari"):
+            st.session_state.tahta_uyari = uyari
+            st.rerun(scope="app")  # tam ekran tahtadaki uyarı güncellensin
         c1, c2 = st.columns([2, 1])
         c1.markdown(f"<span style='color:#E5484D;font-weight:700;font-size:1.1rem'>● Kayıt sürüyor</span>"
                     f"&nbsp;&nbsp;<span style='font-variant-numeric:tabular-nums;font-size:1.1rem'>"

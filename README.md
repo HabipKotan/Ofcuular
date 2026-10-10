@@ -17,10 +17,10 @@
 
 ### 3. 🛡️ Privacy by Design (KVKK ve Mahremiyet Standartları)
 - **Zero-Storage Kamera Akışı:** Görüntüler yalnızca yerel bellekte (RAM) işlenir; diske asla fotoğraf/video kaydedilmez ve sunucuya ham görüntü gönderilmez.
-- **Bulanıklaştırma & Anonimleştirme:** Yüz tanıma veya kimlik tespiti yapılmaz; kamera önizlemesinde yüzler varsayılan olarak bulanıklaştırılır (`GaussianBlur`).
-- **Uçta Analiz (Edge AI):** 468 yüz landmark'ı üzerinden yalnızca baş açısı (Head Pose), göz açıklığı (EAR) ve esneme tespiti yapılarak 0-100 arasında soyut bir metrik üretilir ve kare anında yok edilir.
+- **Bulanıklaştırma & Anonimleştirme:** Varsayılan olarak yüz tanıma yapılmaz; yalnızca açık rıza veren ve öğretmenin kaydettiği öğrenci tanınır (bkz. "Rızalı kişisel odak raporu"). Kamera önizlemesinde yüzler varsayılan olarak bulanıklaştırılır (`GaussianBlur`).
+- **Uçta Analiz (Edge AI):** MediaPipe Face Landmarker'ın 478 yüz noktası ve yüz ifadesi katsayıları (`eyeBlink`, `jawOpen`) üzerinden yalnızca baş açısı (Head Pose), göz kapalılığı ve esneme ölçülerek 0-100 arasında soyut bir metrik üretilir ve kare anında yok edilir.
 - **Geçici Ses Analizi:** Ses metne döküldükten sonra geçici ses verisi bellekten kalıcı olarak silinir.
-- **Merkezi Gözetim Veritabanı Yok:** Öğrenci verisi paylaşılan önbellekte (`st.cache_data`) değil, yalnızca tarayıcı oturumunda (`st.session_state`) tutulur.
+- **Merkezi Gözetim Veritabanı Yok:** Öğrenci verisi paylaşılan önbellekte (`st.cache_data`) değil, tarayıcı oturumunda (`st.session_state`) tutulur. Rızalı öğrencilerin yüz izleri yalnızca bu bilgisayardaki yerel, şifreli veritabanında (`ogrenciler.db`) durur; sunucuya gönderilmez.
 
 ---
 
@@ -169,6 +169,16 @@ Uygulama açılınca rol sorulur; her rol yalnızca kendi ekranını görür (ad
 sayılır). Kameraya yüzü dönük olmayan ya da kadraj dışında kalan öğrenciler sayılmaz. Büyük sınıflar için `.env`
 içinde `KAMERA_MAX_YUZ` değerini artırın (varsayılan 30).
 
+**Arka sıralar (uzak yüz modu, varsayılan):** MediaPipe'ın kendi yüz bulucusu kareyi 128 piksele küçültür ve yalnızca
+kare genişliğinin ~%12'sinden büyük yüzleri bulur; tipik bir webcam'de bu ~1.3 metre demektir. Bu yüzden önce **YuNet**
+tüm kareyi kendi çözünürlüğünde tarar, bulduğu her yüz kırpılıp büyütülerek ayrıca ölçülür. Kırpıntılar yalnızca
+bellekte yaşar. Kamera 1280×720 istenir (OpenCV varsayılanı 640×480). Çok küçük yüzlerde (30 pikselin altı) göz ve
+ağız okunamadığı için yalnızca baş yönü sayılır. Eski hızlı yönteme dönmek için `KAMERA_ALGILAMA=yakin`.
+
+**Esneme dikkat kaybı sayılır:** ağız açıklığı (MediaPipe `jawOpen`) 0.5'i geçince öğrencinin skoru kademeli düşer;
+tam esnemede tahtaya baksa bile 35'e iner. Konuşurken ağız açıklığı genelde 0.4'ün altında kaldığı için konuşan
+öğrenci ceza almaz. Uzun düşüşlerde olay nedeni "esneme / uyku hali" olarak yazılır.
+
 Elle çalıştırma: `python ders_kaydi.py --konu "Matematik: kesirler" [--ses-yok | --odak-yok]`
 (kamera penceresinde `q` ile biter; kamera kapalıysa paneldeki "Dersi Bitir" ile).
 
@@ -202,8 +212,43 @@ Elle çalıştırma: `python ders_kaydi.py --konu "Matematik: kesirler" [--ses-y
 Dosyalar: `ders_kaydi.py`, `ui/ders_kontrol.py`, `ses_hatti/transkript.py`, `ses_hatti/konusmaci.py`, `ses_hatti/notlar.py`.
 Kayıt sırasında sorun çıkarsa panel hatanın nedenini ve kayıt günlüğünün son satırlarını gösterir.
 
-> **Tahta sekmesi kaldırıldı.** `ui/tahta/` ve `ui/tahta_bileseni.py` dosyaları ile `tahtalar/` arşivi klasörde
-> duruyor ama arayüzde kullanılmıyor.
+## 🖊️ Ders tahtası: tam ekran, PDF ve sunumlar
+
+**Dersi Başlat** ile kayıt başlayınca tahta **tam ekran** açılır (Streamlit'in başlığı ve yan paneli gizlenir).
+Tahtaya ilk dokunuşta tarayıcı da gerçek tam ekrana geçer (tarayıcılar bunu bir dokunuş/tıklama olmadan izin vermez).
+
+- Üst çubuk: **Belge ekle**, **Küçült / Tam ekran** ve iki adımlı onaylı **Dersi bitir**. Tam ekranken paneldeki
+  kamera / mikrofon uyarıları tahtanın üst çubuğunda kırmızı bir şerit olarak görünür.
+- **Sürükle-bırak:** PDF, resim (PNG, JPG, GIF, WebP, SVG), PowerPoint (`.pptx .ppt .ppsx .pps .potx .odp .key`) ve
+  Word (`.docx .doc .odt .rtf`) dosyaları tahtaya bırakılabilir. Sayfalar bırakılan yere, mevcut sayfalarla
+  çakışmayacak şekilde eklenir; **üzerine kalemle yazılır**, silgiler slaytı silmez. Panelin **Belgeler** bölümünden
+  belgeye gidilir ya da belge kaldırılır (geri alınabilir).
+- **Sunum kumandası:** PageDown / PageUp (ya da sağ / sol ok) sonraki / önceki sayfanın başına geçer.
+- PDF'ler tarayıcıda, projeye gömülü **pdf.js** ile çizilir (`ui/tahta/pdfjs/`, internet gerekmez).
+- PowerPoint / Word dosyaları önce bu bilgisayarda PDF'e çevrilir (`core/belge_donustur.py`):
+  Windows'ta yüklüyse **Microsoft PowerPoint / Word**, yoksa **LibreOffice**. Hiçbiri yoksa öğretmene dosyayı
+  PDF olarak kaydetmesi söylenir. Dosya geçici klasörde işlenir ve silinir; internete gönderilmez. Sınır: 30 MB.
+- Ders bitince tahtanın son hali (slaytlar ve üzerine yazılanlarla) `tahtalar/` klasörüne PNG + JSON olarak yazılır.
+- Kamera önizleme penceresi artık küçük açılır ve sol alt köşeye yerleşir (`.env`: `KAMERA_ONIZLEME=kucuk|normal|kapali`).
+
+## 🛠️ Türkçe karakterli klasörler ve dayanıklılık
+
+Windows'ta proje yolunda ya da kullanıcı adında Türkçe karakter varsa (ör. `C:\Users\acer\OneDrive\Masaüstü\...`)
+C++ tabanlı kütüphaneler dosyayı açamıyordu (`Unable to open file at ...face_landmarker.task`). Düzeltmeler
+(`core/model_yukle.py`):
+
+- **MediaPipe** (odak ölçümü), **OpenCV YuNet/SFace** (rızalı yüz kaydı) ve **ONNX** (öğretmen sesi ayrımı) modelleri
+  artık yoldan değil **bellekten** yüklenir. Desteklemeyen eski sürümlerde model, İngilizce karakterli bir önbellek
+  klasörüne kopyalanıp oradan açılır.
+- **Whisper** modeli, kullanıcı klasörünün adında Türkçe karakter varsa İngilizce karakterli bir klasöre iner;
+  ses dosyası PyAV'ye dosya nesnesi olarak verilir.
+- Model indirmeleri önce geçici dosyaya yapılır: yarım kalan indirme bozuk model bırakmaz.
+- **Görüntü tarafı çökerse ders kaybolmaz:** kamera açılamazsa ya da görüntü modeli hata verirse ders yalnızca sesle
+  sürer ve notlar yine hazırlanır (önceden bütün kayıt "hata" ile bitiyordu). Ders ortasında çökerse o ana kadarki
+  odak ölçümü korunur.
+- `edge_mediapipe.py`, MediaPipe 0.10.3x'te kaldırılan `mp.solutions` yerine Tasks API'sine taşındı.
+- `baslat.bat`, proje OneDrive klasöründeyse uyarır: senkronizasyon kayıt dosyalarını kilitleyebilir; sorun yaşarsanız
+  klasörü `C:\DersAsistani` gibi bir yere taşıyın.
 
 ## ▶️ Tek tıkla başlatma
 

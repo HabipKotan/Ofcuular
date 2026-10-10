@@ -44,7 +44,7 @@ class WhisperSpeechSource(SpeechSource):
             raise FileNotFoundError(f"İşlenecek ses dosyası bulunamadı: {self.audio_path}")
 
         try:
-            from faster_whisper import WhisperModel
+            from faster_whisper import WhisperModel  # noqa: F401  (kurulu mu kontrolü)
         except ImportError as e:
             raise RuntimeError(
                 f"STT modülü için 'faster-whisper' kütüphanesi gereklidir: {e}"
@@ -52,7 +52,9 @@ class WhisperSpeechSource(SpeechSource):
 
         # compute_type cpu için int8, gpu için float16 seçilir
         compute_type = "int8" if self.device == "cpu" else "float16"
-        model = WhisperModel(self.model_size, device=self.device, compute_type=compute_type)
+        from core import model_yukle  # Türkçe karakterli kullanıcı klasörlerine karşı korumalı
+
+        model = model_yukle.whisper_modeli(self.model_size, device=self.device, compute_type=compute_type)
 
         segments_raw, info = model.transcribe(
             str(self.audio_path),

@@ -17,12 +17,13 @@ Modeller (OpenCV, ek kurulum gerekmez; sensing/focus/modeller/ altında):
 from __future__ import annotations
 
 import time
-import urllib.request
 from collections import deque
 from pathlib import Path
 from typing import Dict, List, Optional
 
 import numpy as np
+
+from core import model_yukle
 
 _PROJE_MODELLER = Path(__file__).resolve().parent / "modeller"
 _URL = "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/"
@@ -54,12 +55,13 @@ OY_GEREKEN = 2       # bir yüz, bu kadar denemede aynı öğrenciye eşleşirse
 TANIMA_ARALIGI = 1.0 # sn: yüz izi bu sıklıkla çıkarılır (her karede değil; işlemciyi yormaz)
 
 
+_EN_AZ_BOYUT = {"yuz_tespit_yunet.onnx": 100_000, "yuz_izi_sface.onnx": 10_000_000}
+
+
 def modelleri_hazirla() -> None:
+    # Yarım kalan indirme bozuk model bırakmasın: geçici dosyaya indirilip tamamlanınca yerine konur
     for yol, url in _INDIR.items():
-        yol.parent.mkdir(parents=True, exist_ok=True)
-        if not yol.exists() or yol.stat().st_size < 1000:
-            print(f"Yüz modeli indiriliyor: {yol.name} …")
-            urllib.request.urlretrieve(url, yol)
+        model_yukle.indir(url, yol, en_az_bayt=_EN_AZ_BOYUT.get(yol.name, 1000), ad="Yüz modeli")
 
 
 class YuzKimligi:
@@ -70,8 +72,9 @@ class YuzKimligi:
 
         modelleri_hazirla()
         self.cv2 = cv2
-        self.tespit = cv2.FaceDetectorYN.create(str(TESPIT_MODELI), "", (320, 320), 0.8, 0.3, 5000)
-        self.taniyici = cv2.FaceRecognizerSF.create(str(IZ_MODELI), "")
+        # Modeller bellekten verilir: OpenCV, Windows'ta Türkçe karakterli yolları (ör. "Masaüstü") açamıyor
+        self.tespit = model_yukle.opencv_yuz_tespit(TESPIT_MODELI, (320, 320), 0.8, 0.3, 5000)
+        self.taniyici = model_yukle.opencv_yuz_tanima(IZ_MODELI)
 
     def yuzleri_bul(self, bgr: np.ndarray) -> np.ndarray:
         h, w = bgr.shape[:2]

@@ -1,0 +1,3 @@
+pdf.js 5.4.296 (Mozilla, Apache-2.0) - legacy build
+Kaynak: https://www.npmjs.com/package/pdfjs-dist
+Tahtaya birakilan PDF dosyalarini internetsiz acmak icin projeye gomulu.

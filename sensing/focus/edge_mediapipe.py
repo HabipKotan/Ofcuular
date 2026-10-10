@@ -120,19 +120,19 @@ class EdgeMediaPipeFocusSource(FocusSource):
                 f"Edge AI modülü için 'opencv-python' ve 'mediapipe' paketleri gereklidir: {e}"
             )
 
-        mp_face_mesh = mp.solutions.face_mesh
+        # mp.solutions (eski FaceMesh API'si) MediaPipe 0.10.3x sürümlerinde kaldırıldı; aynı 468+10 noktayı
+        # veren Tasks API'sindeki FaceLandmarker kullanılır. Model bellekten verilir (Türkçe karakterli yollar).
+        from sensing.focus.classroom_focus import yuz_dedektoru_olustur
+
+        face_landmarker = yuz_dedektoru_olustur(max_yuz=1)
         cap = cv2.VideoCapture(self.camera_index)
         if not cap.isOpened():
+            face_landmarker.close()
             raise RuntimeError(f"Webcam ({self.camera_index}) açılamadı.")
 
         start_time = time.time()
-        
-        with mp_face_mesh.FaceMesh(
-            max_num_faces=1,
-            refine_landmarks=True,
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5,
-        ) as face_mesh:
+
+        with face_landmarker:
             try:
                 while cap.isOpened():
                     now = time.time()
@@ -147,17 +147,18 @@ class EdgeMediaPipeFocusSource(FocusSource):
                     h, w, _ = frame.shape
                     # BGR -> RGB (RAM içi)
                     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    results = face_mesh.process(rgb_frame)
+                    results = face_landmarker.detect_for_video(
+                        mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame), int(elapsed * 1000))
 
                     # --- ZERO-STORAGE: Ham kare bellekten derhal serbest bırakılır ---
                     del frame
                     del rgb_frame
 
-                    if not results.multi_face_landmarks:
+                    if not results.face_landmarks:
                         # Ekranda yüz yoksa odak skoru = 10
                         yield FocusSample(timestamp=round(elapsed, 2), focus_score=10.0)
                     else:
-                        landmarks = results.multi_face_landmarks[0].landmark
+                        landmarks = results.face_landmarks[0]
 
                         # 1. Baş açısı cezası
                         pitch, yaw, _ = self._estimate_head_pose(landmarks, w, h, cv2)

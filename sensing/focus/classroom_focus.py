@@ -13,6 +13,9 @@ Gizlilik tasarimi (KVKK):
 Ozellikler:
   - Sinif skoru + 30 sn'lik yumusatilmis skor
   - Skorun nedeni: yana bakan / basi egik / gozu kapali / esneyen oranlari
+  - Esneme dikkat kaybi sayilir: agiz acikligi arttikca kisi skoru dusurulur (--esneme-cezasi-yok ile kapanir)
+  - Uzak yuz modu (varsayilan): YuNet tum kareyi tarar, her yuz kirpilip buyutulerek olculur; sinifin
+    arka siralari da gorulur. Cok kucuk yuzlerde goz/agiz guvenilmez oldugu icin yalnizca bas yonu kullanilir.
   - Not alma toleransi: basi egik ama gozu acik olan tam ceza almaz
   - Dikkat dususu olaylari (skor uzun sure dusuk kalirsa) + canli uyari
   - Kor nokta: gorulen yuz sayisi aniden duserse o aralik "guvenilmez" sayilir
@@ -37,6 +40,7 @@ K=gozu kapali, A=agzi acik (esneme). Ilk calistirmada basinizi one egin:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import csv
 import json
 import math
@@ -45,7 +49,6 @@ import statistics
 import sys
 import os
 import time
-import urllib.request
 from collections import deque
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
@@ -53,13 +56,27 @@ from pathlib import Path
 
 import numpy as np
 
+try:
+    from core import model_yukle
+except ImportError:  # dosya tek basina calistirildi: proje kokunu yola ekle
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from core import model_yukle
+
 MODEL_URL = (
     "https://storage.googleapis.com/mediapipe-models/face_landmarker/"
     "face_landmarker/float16/1/face_landmarker.task"
 )
 MODEL_DOSYA = Path(__file__).with_name("face_landmarker.task")
 
-NEDEN_ADLARI = {"yana": "yana bakma", "egik": "bas egik", "kapali": "goz kapali / yorgunluk"}
+NEDEN_ADLARI = {"yana": "yana bakma", "egik": "bas egik", "kapali": "goz kapali / yorgunluk",
+                "esneme": "esneme / uyku hali"}
+
+# Uzak yuz algilama (YuNet). FaceLandmarker'in kendi yuz bulucusu kareyi 128 piksele kucultur ve yalnizca
+# kare genisliginin ~%12'sinden buyuk yuzleri bulur (tipik webcam'de ~1.3 m). YuNet kareyi kendi
+# cozunurlugunde tarar; buldugu her yuz kirpilip buyutulerek FaceLandmarker'a ayrica verilir.
+YUNET_DOSYA = Path(__file__).with_name("modeller") / "yuz_tespit_yunet.onnx"
+YUNET_URL = ("https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/"
+             "face_detection_yunet/face_detection_yunet_2023mar.onnx")
 
 # Ders kaydi entegrasyonu (ders_kaydi.py tarafindan doldurulur; tek basina calisirken None kalir)
 #   BASLANGIC_KANCASI(monotonic_saat): olcum saati sifirlandigi an cagrilir -> mikrofon ayni anda baslar
@@ -71,9 +88,12 @@ DURDUR_DOSYASI: Path | None = None
 KAMERA_KOPTU = False
 
 
-def kamera_ac(indeks: int, sessiz: bool = False):
+def kamera_ac(indeks: int, sessiz: bool = False, genislik: int = 0, yukseklik: int = 0):
     """Kamerayi acar ve GERCEKTEN goruntu verdigini dogrular. Windows'ta farkli suruculeri (DirectShow,
-    Media Foundation) ve gerekirse diger kamera numaralarini dener. Olmazsa None."""
+    Media Foundation) ve gerekirse diger kamera numaralarini dener. Olmazsa None.
+
+    genislik/yukseklik verilirse o cozunurluk istenir (OpenCV varsayilani cogu kamerada 640x480'dir;
+    arka siralardaki yuzler bu cozunurlukte birkac pikselden ibaret kalir)."""
     import cv2
     suruculer = ([("DirectShow", cv2.CAP_DSHOW), ("MediaFoundation", cv2.CAP_MSMF)] if os.name == "nt" else [])
     suruculer.append(("varsayilan", cv2.CAP_ANY))
@@ -83,13 +103,21 @@ def kamera_ac(indeks: int, sessiz: bool = False):
             if not kamera.isOpened():
                 kamera.release()
                 continue
+            if genislik and yukseklik:
+                # MJPG: cogu USB kamera 720p/1080p'yi ancak sikistirilmis bicimde akici verir
+                kamera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+                kamera.set(cv2.CAP_PROP_FRAME_WIDTH, genislik)
+                kamera.set(cv2.CAP_PROP_FRAME_HEIGHT, yukseklik)
             bas = time.monotonic()
             while time.monotonic() - bas < 3:  # bazi kameralar ilk karelerde bos doner (isinma)
-                tamam, _ = kamera.read()
+                tamam, kare = kamera.read()
                 if tamam:
                     if not sessiz or i != indeks:
-                        print(f"Kamera acildi: {i} numara ({ad})"
+                        print(f"Kamera acildi: {i} numara ({ad}), {kare.shape[1]}x{kare.shape[0]}"
                               + ("" if i == indeks else f"  [istenen {indeks} numara goruntu vermedi]"))
+                        if genislik and kare.shape[1] < genislik:
+                            print(f"  Not: kamera {genislik}x{yukseklik} desteklemiyor; uzak yuzler icin "
+                                  "daha yuksek cozunurluklu bir kamera menzili artirir.")
                     return kamera
                 time.sleep(0.1)
             kamera.release()
@@ -127,6 +155,14 @@ class Esikler:
     kapali_esik: float = 0.70  # eyeBlink bunu asarsa "gozu kapali"
     esneme_esik: float = 0.60  # jawOpen bunu asarsa "esniyor"
     not_tabani: float = 0.60   # basi egik + gozu acik olan en az bu kadar puan alir
+    # Esneme cezasi: jawOpen esneme_bas'tan sonra skoru dusurmeye baslar, esneme_tam'da skor
+    # esneme_tabani ile carpilir (tam dikkatli biri bile 100 -> 35, yani "dikkatsiz" sayilir).
+    # Konusurken jawOpen genelde 0.4'un altinda kalir; bu yuzden rampa 0.5'ten baslar.
+    esneme_bas: float = 0.50
+    esneme_tam: float = 0.80
+    esneme_tabani: float = 0.35
+    # Bu genislikten (piksel) kucuk yuzlerde goz ve agiz okumasi guvenilmez: yalnizca bas yonu kullanilir
+    ince_ayrinti_min_px: float = 30.0
 
 
 @dataclass
@@ -173,8 +209,13 @@ def kisi_skoru(yaw: float, pitch: float, goz_kapalilik: float, e: Esikler) -> fl
     return 100.0 * bas * goz
 
 
+def esneme_carpani(cene: float, e: Esikler) -> float:
+    """jawOpen'a gore skor carpani: esneme_bas'a kadar 1.0, esneme_tam'da esneme_tabani."""
+    return e.esneme_tabani + (1.0 - e.esneme_tabani) * _rampa(cene, e.esneme_bas, e.esneme_tam)
+
+
 def yuz_olc(yaw: float, pitch: float, goz: float, cene: float, e: Esikler,
-            not_toleransi: bool = True) -> YuzOlcum:
+            not_toleransi: bool = True, esneme_cezasi: bool = True) -> YuzOlcum:
     """Tek yuz icin skor + neden siniflari."""
     skor = kisi_skoru(yaw, pitch, goz, e)
     yana = abs(yaw) > e.yana_esik
@@ -186,6 +227,9 @@ def yuz_olc(yaw: float, pitch: float, goz: float, cene: float, e: Esikler,
     if not_toleransi and pitch > e.pitch_tam and not kapali:
         taban = 100.0 * e.not_tabani * _rampa(abs(yaw), e.yaw_tam, e.yaw_sifir)
         skor = max(skor, taban)
+    # Esneme dikkat kaybi sayilir. Not toleransindan SONRA uygulanir: deftere bakarken esneyen de ceza alir.
+    if esneme_cezasi:
+        skor *= esneme_carpani(cene, e)
     return YuzOlcum(skor, yana, egik, kapali, esniyor)
 
 
@@ -297,7 +341,7 @@ class OlayDedektoru:
         self._bas: datetime | None = None
         self._son: datetime | None = None
         self._skorlar: list[float] = []
-        self._neden = {"yana": 0.0, "egik": 0.0, "kapali": 0.0}
+        self._neden = {"yana": 0.0, "egik": 0.0, "kapali": 0.0, "esneme": 0.0}
         self._ust = 0
 
     def aktif_sure(self) -> float:
@@ -445,7 +489,8 @@ def oturum_ozeti(oturum: Oturum, ders: str) -> dict:
         saate_gore=[{"saat": s, "skor": v} for s, v in satirlar],
         en_dusuk=dict(zip(("saat", "skor"), min(satirlar, key=lambda x: x[1]))),
         en_yuksek=dict(zip(("saat", "skor"), max(satirlar, key=lambda x: x[1]))),
-        neden_oranlari={"yana": ort("yana"), "egik": ort("egik"), "kapali": ort("kapali")},
+        neden_oranlari={"yana": ort("yana"), "egik": ort("egik"), "kapali": ort("kapali"),
+                        "esneme": ort("esneme")},
         esneme={"ortalama": ort("esneme"), "tepe_saat": f"{esneme_tepe.bitis:%H:%M:%S}",
                 "tepe_oran": esneme_tepe.esneme},
     )
@@ -578,10 +623,45 @@ def _bos(v):
 # --------------------------------------------------------------------------
 
 def model_hazirla() -> Path:
-    if not MODEL_DOSYA.exists():
-        print("Yuz modeli indiriliyor (tek seferlik, ~4 MB)...")
-        urllib.request.urlretrieve(MODEL_URL, MODEL_DOSYA)
-    return MODEL_DOSYA
+    # Yarim kalmis indirme bozuk dosya birakmasin diye gecici dosyaya indirilip yerine konur
+    return model_yukle.indir(MODEL_URL, MODEL_DOSYA, en_az_bayt=1_000_000, ad="Yuz modeli (~4 MB)")
+
+
+def yuz_dedektoru_olustur(max_yuz: int):
+    """FaceLandmarker'i olusturur. Model YOL olarak degil BELLEKTEN verilir: MediaPipe'in C++ katmani
+    Windows'ta Turkce karakter iceren yollari (or. C:/Users/acer/OneDrive/Masaüstü/...) acamiyor."""
+    from mediapipe.tasks import python as mp_python
+    from mediapipe.tasks.python import vision
+
+    try:
+        secenekler = vision.FaceLandmarkerOptions(
+            base_options=mp_python.BaseOptions(model_asset_buffer=model_yukle.bayt_oku(model_hazirla())),
+            running_mode=vision.RunningMode.VIDEO,
+            num_faces=max_yuz,
+            output_face_blendshapes=True,
+            output_facial_transformation_matrixes=True,
+        )
+        return vision.FaceLandmarker.create_from_options(secenekler)
+    except Exception as e:
+        raise RuntimeError(f"Yuz modeli yuklenemedi ({MODEL_DOSYA.name}): {e}. Dosya bozuksa silin; "
+                           "bir sonraki calistirmada yeniden indirilir.") from e
+
+
+def onizleme_penceresi_hazirla(cv2, baslik: str, genislik: int, oran: float = 0.75) -> None:
+    """Onizleme penceresini kucuk tutup sol alt koseye koyar; tam ekran ders defterinin ortasina acilmaz."""
+    if genislik <= 0:
+        return
+    try:
+        cv2.namedWindow(baslik, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
+        yukseklik = int(genislik * oran)
+        cv2.resizeWindow(baslik, genislik, yukseklik)
+        ekran_y = 1080
+        if os.name == "nt":
+            import ctypes
+            ekran_y = ctypes.windll.user32.GetSystemMetrics(1) or ekran_y
+        cv2.moveWindow(baslik, 16, max(0, ekran_y - yukseklik - 90))
+    except Exception:
+        pass  # pencere ayari yapilamazsa varsayilan boyutta acilir
 
 
 def blendshape_degerleri(blendshapes) -> tuple[float, float]:
@@ -591,27 +671,128 @@ def blendshape_degerleri(blendshapes) -> tuple[float, float]:
     return goz, d.get("jawOpen", 0.0)
 
 
+@dataclass
+class _Nokta:
+    """Tam kareye geri tasinmis landmark (MediaPipe NormalizedLandmark ile ayni .x/.y arayuzu)."""
+    x: float
+    y: float
+
+
+class UzakYuzBulucu:
+    """Sinifin arka siralarindaki kucuk yuzler icin iki asamali algilama.
+
+    1) YuNet tum kareyi tarar (FaceLandmarker'in aksine kareyi 128 piksele kucultmez).
+    2) Her yuz, cevresindeki bas payiyla kare seklinde kirpilir ve kirp_boyut piksele buyutulur.
+    3) FaceLandmarker (IMAGE modu, tek yuz) kirpintida calisir; landmarklar tam kareye geri tasinir.
+
+    Kirpintilar yalnizca bellekte yasar ve dongu sonunda atilir; diske yazilmaz.
+    """
+
+    def __init__(self, cv2, mp, model_yolu: Path, *, esik: float = 0.6,
+                 tespit_genislik: int = 1280, kirp_kenar: float = 2.6, kirp_boyut: int = 256):
+        from mediapipe.tasks import python as mp_python
+        from mediapipe.tasks.python import vision
+
+        self.cv2, self.mp = cv2, mp
+        self.tespit_genislik, self.kirp_kenar, self.kirp_boyut = tespit_genislik, kirp_kenar, kirp_boyut
+        # Modeller YOL yerine BELLEKTEN verilir (Windows'ta Turkce karakterli klasorler, or. "Masaustu"
+        # yerine "Masa-u-stu", MediaPipe/OpenCV'de "Unable to open file" hatasi veriyordu). Indirme yarim kalmaz.
+        model_yukle.indir(YUNET_URL, YUNET_DOSYA, en_az_bayt=100_000, ad="Uzak yuz modeli (YuNet, ~230 KB)")
+        self.tespit = model_yukle.opencv_yuz_tespit(YUNET_DOSYA, (320, 320), esik, 0.3, 5000)
+        self.landmarker = vision.FaceLandmarker.create_from_options(vision.FaceLandmarkerOptions(
+            base_options=mp_python.BaseOptions(model_asset_buffer=model_yukle.bayt_oku(model_yolu)),
+            running_mode=vision.RunningMode.IMAGE,
+            num_faces=1,
+            output_face_blendshapes=True,
+            output_facial_transformation_matrixes=True,
+            # Kirpintida yuz zaten YuNet tarafindan dogrulandi; bulaniklasan uzak yuzu kacirmasin
+            min_face_detection_confidence=0.3,
+            min_face_presence_confidence=0.3,
+        ))
+
+    def kapat(self) -> None:
+        self.landmarker.close()
+
+    def _yuz_kutulari(self, kare) -> list[tuple[float, float, float, float]]:
+        """YuNet kutulari, tam kare piksel koordinatinda (x, y, w, h)."""
+        h, w = kare.shape[:2]
+        olcek = min(1.0, self.tespit_genislik / w)  # 1080p'yi 1280'e indirir: ~2x hizli, menzil ayni
+        girdi = kare if olcek == 1.0 else self.cv2.resize(kare, (round(w * olcek), round(h * olcek)),
+                                                           interpolation=self.cv2.INTER_AREA)
+        self.tespit.setInputSize((girdi.shape[1], girdi.shape[0]))
+        _, yuzler = self.tespit.detect(girdi)
+        if yuzler is None:
+            return []
+        return [tuple(float(v) / olcek for v in y[:4]) for y in yuzler]
+
+    def bul(self, kare) -> list[tuple]:
+        """Dondurur: [(transform_matrisi, blendshapes, tam_kare_landmarklari, yuz_genisligi_px), ...]"""
+        cv2 = self.cv2
+        H, W = kare.shape[:2]
+        sonuc = []
+        for x, y, w, h in self._yuz_kutulari(kare):
+            kenar = max(w, h) * self.kirp_kenar
+            x1, y1 = int(round(x + w / 2 - kenar / 2)), int(round(y + h / 2 - kenar / 2))
+            k = int(round(kenar))
+            # Kare kenarina tasan kirpinti siyahla doldurulur: en-boy orani bozulmasin, geri tasima dogru olsun
+            kirpinti = np.zeros((k, k, 3), np.uint8)
+            sx1, sy1, sx2, sy2 = max(0, x1), max(0, y1), min(W, x1 + k), min(H, y1 + k)
+            if sx2 <= sx1 or sy2 <= sy1:
+                continue
+            kirpinti[sy1 - y1:sy2 - y1, sx1 - x1:sx2 - x1] = kare[sy1:sy2, sx1:sx2]
+            buyuk = cv2.resize(kirpinti, (self.kirp_boyut, self.kirp_boyut), interpolation=cv2.INTER_CUBIC)
+            rgb = cv2.cvtColor(buyuk, cv2.COLOR_BGR2RGB)
+            r = self.landmarker.detect(self.mp.Image(image_format=self.mp.ImageFormat.SRGB, data=rgb))
+            del kirpinti, buyuk, rgb
+            if not r.face_landmarks or not r.facial_transformation_matrixes:
+                continue
+            lm = r.face_landmarks[0]
+            # Kirpintiya kismen giren komsu yuzu almamak icin: bulunan yuz kirpintinin ortasinda olmali
+            mx = sum(p.x for p in lm) / len(lm)
+            my = sum(p.y for p in lm) / len(lm)
+            if abs(mx - 0.5) > 0.2 or abs(my - 0.5) > 0.2:
+                continue
+            tam = [_Nokta((x1 + p.x * k) / W, (y1 + p.y * k) / H) for p in lm]
+            sonuc.append((r.facial_transformation_matrixes[0],
+                          r.face_blendshapes[0] if r.face_blendshapes else None, tam, w))
+        return sonuc
+
+
 def calistir(args: argparse.Namespace) -> None:
     import cv2
     import mediapipe as mp
-    from mediapipe.tasks import python as mp_python
-    from mediapipe.tasks.python import vision
 
     esikler = Esikler()
-    secenekler = vision.FaceLandmarkerOptions(
-        base_options=mp_python.BaseOptions(model_asset_path=str(model_hazirla())),
-        running_mode=vision.RunningMode.VIDEO,
-        num_faces=args.max_yuz,
-        output_face_blendshapes=True,
-        output_facial_transformation_matrixes=True,
-    )
+    # Modeller, kamera acilmadan ve ders saati baslamadan ONCE yuklenir: sorun varsa ders "kayit" durumuna
+    # gecmeden anlasilir ve ders_kaydi.py dersi yalnizca sesle surdurebilir.
+    uzak = None
+    if args.algilama == "uzak":
+        try:
+            uzak = UzakYuzBulucu(cv2, mp, model_hazirla(), esik=args.yuz_esik)
+            print("Yuz algilama: UZAK modu (YuNet + kirp-buyut; arka siralar da gorulur)")
+        except Exception as e:  # uzak mod kurulamazsa olcum durmasin: yakin moda gec
+            print(f"Uzak yuz modu baslatilamadi ({e}); YAKIN moduna geciliyor.")
+    if uzak is None:
+        print("Yuz algilama: YAKIN modu (yalnizca kameraya ~1.3 m'den yakin yuzler)")
+    dedektor = yuz_dedektoru_olustur(args.max_yuz) if uzak is None else None   # yalnizca yakin modda gerekli
+
+    def modelleri_kapat() -> None:
+        if dedektor is not None:
+            dedektor.close()
+        if uzak is not None:
+            uzak.kapat()
 
     global KAMERA_KOPTU
     KAMERA_KOPTU = False
-    kamera = kamera_ac(args.kamera)
+    kamera = kamera_ac(args.kamera, genislik=args.genislik, yukseklik=args.yukseklik)
     if kamera is None:
+        modelleri_kapat()
         sys.exit("Kamera acilamadi ya da goruntu vermiyor. Kamerayi baska bir program (or. tarayicidaki "
                  "kamera, Zoom/Teams, Kamera uygulamasi) kullaniyor olabilir; onu kapatip tekrar deneyin.")
+    PENCERE = "Sinif Dikkat Olcer (q: cikis)"
+    if not args.onizleme_yok:
+        onizleme_penceresi_hazirla(cv2, PENCERE, args.onizleme_genislik,
+                                   oran=(args.yukseklik / args.genislik) if args.genislik and args.yukseklik else 0.75)
 
     kok = dosya_koku(args.klasor, args.ders, datetime.now())
     csv_yol, olay_yol = Path(f"{kok}.csv"), Path(f"{kok}_olaylar.csv")
@@ -635,6 +816,8 @@ def calistir(args: argparse.Namespace) -> None:
     kalibrasyon_bitti = args.kalibrasyon <= 0
     son: Kayit | None = None
     uyari_verildi = False
+    donem_kare = 0        # bu donemde islenen kare (fps gostermek icin)
+    donem_uzak_yuz = 0    # goz/agiz okunamayacak kadar kucuk yuz sayisi (yalnizca bas yonu kullanildi)
 
     def olay_yaz(olay: Olay | None) -> None:
         if not olay:
@@ -648,10 +831,13 @@ def calistir(args: argparse.Namespace) -> None:
 
     def donem_yaz(an: float) -> None:
         """Biriken donemi isler, CSV'ye yazar."""
-        nonlocal son, uyari_verildi, donem_basi, donem_basi_zaman
+        nonlocal son, uyari_verildi, donem_basi, donem_basi_zaman, donem_kare, donem_uzak_yuz
         ozet = toplayici.ozet()
         toplayici.sifirla()
         bas, bit = donem_basi_zaman, datetime.now()
+        fps = donem_kare / max(1e-6, an - donem_basi)
+        kucuk = donem_uzak_yuz / max(1, donem_kare)
+        donem_kare = donem_uzak_yuz = 0
         donem_basi, donem_basi_zaman = an, bit
         if not ozet:
             return
@@ -666,7 +852,8 @@ def calistir(args: argparse.Namespace) -> None:
         else:
             print(f"[{bit:%H:%M:%S}] skor={son.skor:5.1f} ort={_bos(son.yumusak)!s:>5} "
                   f"yuz={son.ortalama_yuz} yana={son.yana} egik={son.egik} "
-                  f"kapali={son.kapali} esneme={son.esneme}"
+                  f"kapali={son.kapali} esneme={son.esneme} fps={fps:.1f}"
+                  + (f" kucuk_yuz={kucuk:.1f}" if kucuk else "")
                   + ("" if son.guvenilir else "  [GUVENILMEZ: yuz sayisi dustu]"))
         olay_yaz(olay)
         if oturum.uyari_suresi and not uyari_verildi:
@@ -681,7 +868,7 @@ def calistir(args: argparse.Namespace) -> None:
         print(f"Kalibrasyon: {args.kalibrasyon:.0f} sn boyunca herkes tahtaya baksin...")
 
     try:
-        with vision.FaceLandmarker.create_from_options(secenekler) as dedektor:
+        with (dedektor if dedektor is not None else contextlib.nullcontext()):
             while True:
                 if DURDUR_DOSYASI is not None and DURDUR_DOSYASI.exists():
                     break
@@ -695,7 +882,8 @@ def calistir(args: argparse.Namespace) -> None:
                     if not tamam:
                         print("Kameradan kare gelmiyor; kamera yeniden aciliyor...")
                         kamera.release()
-                        yeni = kamera_ac(args.kamera, sessiz=True)
+                        yeni = kamera_ac(args.kamera, sessiz=True, genislik=args.genislik,
+                                         yukseklik=args.yukseklik)
                         if yeni is not None:
                             kamera = yeni
                             tamam, kare = kamera.read()
@@ -705,18 +893,32 @@ def calistir(args: argparse.Namespace) -> None:
                         break
 
                 simdi = time.monotonic()
-                rgb = cv2.cvtColor(kare, cv2.COLOR_BGR2RGB)
-                goruntu = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-                sonuc = dedektor.detect_for_video(goruntu, int((simdi - baslangic) * 1000))
+                kare_h, kare_w = kare.shape[:2]
+                if uzak is not None:
+                    bulunan = uzak.bul(kare)[:args.max_yuz]
+                else:
+                    rgb = cv2.cvtColor(kare, cv2.COLOR_BGR2RGB)
+                    goruntu = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+                    sonuc = dedektor.detect_for_video(goruntu, int((simdi - baslangic) * 1000))
+                    del rgb, goruntu
+                    bulunan = [(m, sonuc.face_blendshapes[i] if sonuc.face_blendshapes else None,
+                                sonuc.face_landmarks[i],
+                                (max(p.x for p in sonuc.face_landmarks[i])
+                                 - min(p.x for p in sonuc.face_landmarks[i])) * kare_w)
+                               for i, m in enumerate(sonuc.facial_transformation_matrixes or [])]
 
                 ham = []  # (yaw, pitch, goz, cene, landmarklar)
-                for i, matris in enumerate(sonuc.facial_transformation_matrixes or []):
+                donem_kare += 1
+                for matris, blend, landmarklar, yuz_px in bulunan:
                     yaw, pitch = bas_acilari(matris)
                     if args.pitch_ters:
                         pitch = -pitch
-                    goz, cene = (blendshape_degerleri(sonuc.face_blendshapes[i])
-                                 if sonuc.face_blendshapes else (0.0, 0.0))
-                    ham.append((yaw, pitch, goz, cene, sonuc.face_landmarks[i]))
+                    goz, cene = blendshape_degerleri(blend) if blend else (0.0, 0.0)
+                    if yuz_px < esikler.ince_ayrinti_min_px:
+                        # Cok kucuk yuz: goz/agiz okumasi gurultu; yalnizca bas yonu sayilir
+                        goz = cene = 0.0
+                        donem_uzak_yuz += 1
+                    ham.append((yaw, pitch, goz, cene, landmarklar))
 
                 yuzler: list[YuzOlcum] = []
                 if not kalibrasyon_bitti:
@@ -730,7 +932,8 @@ def calistir(args: argparse.Namespace) -> None:
                         donem_basi, donem_basi_zaman = simdi, datetime.now()
                 else:
                     yuzler = [yuz_olc(y - yaw0, p - pitch0, g, c, esikler,
-                                      not_toleransi=not args.not_toleransi_yok)
+                                      not_toleransi=not args.not_toleransi_yok,
+                                      esneme_cezasi=not args.esneme_cezasi_yok)
                               for y, p, g, c, _ in ham]
                     toplayici.ekle(yuzler)
                     if simdi - donem_basi >= args.aralik:
@@ -757,14 +960,16 @@ def calistir(args: argparse.Namespace) -> None:
                                     0.6, (255, 255, 255), 4)
                         cv2.putText(kare, ad, (int(x1), max(15, int(y1) - 26)), cv2.FONT_HERSHEY_SIMPLEX,
                                     0.6, (200, 90, 20), 2)
-                    cv2.imshow("Sinif Dikkat Olcer (q: cikis)", kare)
+                    cv2.imshow(PENCERE, kare)
                     if cv2.waitKey(1) & 0xFF == ord("q"):
                         break
-                del kare, rgb, goruntu  # kare hicbir yerde saklanmaz
+                del kare  # kare hicbir yerde saklanmaz
     except KeyboardInterrupt:
         pass
     finally:
         kamera.release()
+        if uzak is not None:
+            uzak.kapat()   # (yakin moddaki dedektoru 'with' blogu kapatir)
         an = time.monotonic()
         if KISI_KANCASI is not None:
             try:
@@ -832,6 +1037,17 @@ def main() -> None:
     p.add_argument("--klasor", default="kayitlar", help="Cikti klasoru (varsayilan: kayitlar)")
     p.add_argument("--kamera", type=int, default=0, help="Kamera indeksi (varsayilan 0)")
     p.add_argument("--max-yuz", type=int, default=10, help="Ayni anda izlenecek en fazla yuz")
+    p.add_argument("--algilama", choices=("uzak", "yakin"), default=os.getenv("KAMERA_ALGILAMA", "uzak"),
+                   help="uzak: arka siralar dahil (YuNet + kirp-buyut, varsayilan). "
+                        "yakin: eski hizli yontem, yalnizca kameraya ~1.3 m'den yakin yuzler")
+    p.add_argument("--genislik", type=int, default=int(os.getenv("KAMERA_GENISLIK", "1280")),
+                   help="Istenen kamera genisligi (varsayilan 1280; 0 = kameranin varsayilani)")
+    p.add_argument("--yukseklik", type=int, default=int(os.getenv("KAMERA_YUKSEKLIK", "720")),
+                   help="Istenen kamera yuksekligi (varsayilan 720)")
+    p.add_argument("--yuz-esik", type=float, default=float(os.getenv("KAMERA_YUZ_ESIK", "0.6")),
+                   help="Uzak modda yuz bulma guveni (dusurmek daha uzaktakileri yakalar, yanlis algilamayi artirir)")
+    p.add_argument("--esneme-cezasi-yok", action="store_true",
+                   help="Esnemeyi dikkat kaybi sayma (yalnizca 'A' harfiyle isaretle)")
     p.add_argument("--aralik", type=float, default=5.0, help="Olcum donemi (sn)")
     p.add_argument("--kalibrasyon", type=float, default=0.0,
                    help="Baslangicta 'tahtaya bakis' yonunu ogrenme suresi (sn)")
@@ -846,6 +1062,8 @@ def main() -> None:
                    help="Bas egme yonu ters algilaniyorsa (one egince 'E' cikmiyorsa)")
     p.add_argument("--grafik-yok", action="store_true", help="Kapanista grafik cizme")
     p.add_argument("--onizleme-yok", action="store_true", help="Pencere acma")
+    p.add_argument("--onizleme-genislik", type=int, default=0,
+                   help="Onizleme penceresi genisligi (px); 0 = kameranin kendi boyutu")
     p.add_argument("--yuz-goster", action="store_true",
                    help="Onizlemede yuzleri bulaniklastirma (sadece gelistirme icin)")
     args = p.parse_args()

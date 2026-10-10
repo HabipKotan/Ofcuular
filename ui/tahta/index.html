@@ -161,6 +161,45 @@
   label.anahtar input { width: 18px; height: 18px; accent-color: var(--vurgu); }
   #sayac { font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: center; margin: 2px 0 6px; }
   .not { font-size: 12px; color: var(--yazi-soluk); margin: 6px 0 0; }
+
+  /* ---- ust cubuk: belge / tam ekran / dersi bitir ---- */
+  .ust-dugme { height: 38px; padding: 0 12px 0 9px; border-radius: 10px; border: 1px solid var(--panel-kenar);
+               background: var(--dugme); display: flex; align-items: center; gap: 6px; font-weight: 600; white-space: nowrap; }
+  .ust-dugme:hover { border-color: var(--yazi-soluk); }
+  .ust-dugme svg.ikon { width: 20px; height: 20px; }
+  #bitir-dugme { display: none; }
+  body.yonetilen #bitir-dugme { display: block; }
+  #bitir-dugme:disabled { opacity: .6; cursor: default; }
+  #uyari-cip { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
+               font-size: 13px; font-weight: 600; color: var(--tehlike); border: 1px solid var(--tehlike);
+               border-radius: 999px; padding: 5px 11px; background: transparent; }
+  #uyari-cip[hidden] { display: none; }
+  @media (max-width: 1100px) { .ust-dugme span { display: none; } .ust-dugme { padding: 0 9px; } }
+
+  /* ---- belgeler: surukle-birak katmani, bos sayfa ipucu, bildirim ---- */
+  #birak { position: absolute; inset: 10px; z-index: 6; display: none; place-items: center; pointer-events: none;
+           border: 2px dashed var(--vurgu); border-radius: 18px; background: color-mix(in srgb, var(--vurgu-zemin) 88%, transparent); }
+  body.surukleniyor #birak { display: grid; }
+  #birak div { text-align: center; max-width: 30em; padding: 0 20px; }
+  #birak b { display: block; font-size: 22px; margin-bottom: 6px; color: var(--vurgu); }
+  #birak span { color: var(--yazi); font-size: 15px; }
+  #bos-ipucu { position: absolute; left: 0; right: 0; top: 34%; z-index: 2; pointer-events: none; text-align: center;
+               color: var(--yazi-soluk); font-size: 16px; line-height: 1.5; padding: 0 24px; display: none; }
+  body.bos:not(.kilitli) #bos-ipucu { display: block; }
+  #bos-ipucu b { display: block; color: var(--yazi); font-size: 19px; font-weight: 600; margin-bottom: 4px; }
+  body:not(.panel-kapali) #bos-ipucu { right: 258px; }
+  #bildirim { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 7;
+              display: flex; align-items: center; gap: 12px; max-width: min(560px, calc(100% - 32px));
+              background: var(--panel); color: var(--yazi); border: 1px solid var(--panel-kenar); border-radius: 12px;
+              box-shadow: var(--golge); padding: 10px 10px 10px 16px; font-size: 14px; line-height: 1.4; }
+  #bildirim[hidden] { display: none; }
+  #bildirim button { flex: none; height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid transparent; background: var(--dugme); }
+  .belge-satir { display: grid; grid-template-columns: 1fr auto auto auto; gap: 6px; align-items: center; margin-bottom: 6px; }
+  .belge-ad { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
+  .belge-bilgi { font-size: 12px; color: var(--yazi-soluk); font-variant-numeric: tabular-nums; }
+  .belge-satir button { height: 30px; padding: 0 8px; border-radius: 8px; border: 1px solid transparent; background: var(--dugme); font-size: 12.5px; }
+  .belge-satir button.tehlike { color: var(--tehlike); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--vurgu); outline-offset: 2px; }
 </style>
 </head>
 <body data-arac="kalem">
@@ -170,9 +209,15 @@
   <input id="ders" placeholder="Ders adı (örn. Matematik 9-A)" aria-label="Ders adı" autocomplete="off">
   <span id="ders-sure" hidden title="Ders süresi">00:00</span>
   <button class="birincil" id="ders-dugme">Dersi başlat</button>
+  <button id="uyari-cip" hidden title=""></button>
   <span id="durum" aria-live="polite"></span>
   <button class="kare" id="geri" title="Geri al (Ctrl+Z)" aria-label="Geri al"><svg class="ikon" viewBox="0 0 24 24"><path d="M9 5L4 10l5 5M4 10h10a5 5 0 010 10h-4"/></svg></button>
   <button class="kare" id="ileri" title="Yinele (Ctrl+Y)" aria-label="Yinele"><svg class="ikon" viewBox="0 0 24 24"><path d="M15 5l5 5-5 5M20 10H10a5 5 0 000 10h4"/></svg></button>
+  <button class="ust-dugme" id="belge-dugme" title="PDF, sunum ya da resim ekle. Dosyayı sayfaya sürükleyip bırakabilirsiniz."><svg class="ikon" viewBox="0 0 24 24"><path d="M14 3H7a1 1 0 00-1 1v16a1 1 0 001 1h10a1 1 0 001-1V7l-4-4zM14 3v4h4M12 11v6M9 14h6"/></svg><span>Belge ekle</span></button>
+  <button class="ust-dugme" id="tam-dugme" title="Tam ekran"><svg class="ikon" viewBox="0 0 24 24"><path id="tam-ikon" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span id="tam-yazi">Tam ekran</span></button>
+  <button class="birincil calisiyor" id="bitir-dugme" title="Dersi bitirir; kayıt durur ve notlar hazırlanır">Dersi bitir</button>
+  <input type="file" id="belge-dosya" multiple hidden
+         accept=".pdf,application/pdf,image/*,.ppt,.pptx,.pps,.ppsx,.pot,.potx,.odp,.key,.doc,.docx,.odt,.rtf">
 </header>
 
 <main>
@@ -182,6 +227,9 @@
   </div>
 
   <div id="onizleme" hidden><canvas></canvas><div></div></div>
+  <div id="bos-ipucu"><b>Yazmaya başlayın</b>ya da bir PDF, PowerPoint sunumu veya resmi buraya sürükleyin.<br>Sayfalar bıraktığınız yere eklenir; üzerine yazabilirsiniz.</div>
+  <div id="birak"><div><b>Bırakın</b><span>PDF, sunum, Word belgesi ya da resim bu sayfaya eklenecek.</span></div></div>
+  <div id="bildirim" role="status" aria-live="polite" hidden><span></span><button type="button">Kapat</button></div>
   <div id="kilit">Yazmak ve çizmek için önce <b>Dersi başlat</b>'a basın.</div>
 
   <aside id="panel" aria-label="Araçlar">
@@ -212,6 +260,13 @@
       <section>
         <h2>Kalınlık</h2>
         <div class="satir"><input id="kalinlik" type="range" min="1" max="100" step="1" aria-label="Kalınlık (1-100)"><output id="kalinlik-deger" for="kalinlik">1</output><span id="onizle"><i></i></span></div>
+      </section>
+
+      <section>
+        <h2>Belgeler</h2>
+        <div id="belge-listesi"></div>
+        <button class="duz" id="belge-ekle-panel">Belge ekle</button>
+        <p class="not">PDF, PowerPoint, Word ya da resmi sayfaya sürükleyin. Sunum kumandası veya PageDown / PageUp ile sayfalar arasında geçin.</p>
       </section>
 
       <section>
@@ -321,6 +376,8 @@ function kutu(o) {
     k = [x1 - p, y1 - p, x2 + p, y2 + p];
   } else if (o.k === 'defter') {
     k = [o.x - 20, o.y - 2, o.x + 66, o.y + 74];
+  } else if (o.k === 'resim') {           // PDF / sunum sayfasi ya da resim
+    k = [o.x, o.y, o.x + o.w, o.y + o.h];
   } else if (o.k === 'metin') {
     const satirlar = o.metin.split('\n');
     tctx.save(); tctx.setTransform(1, 0, 0, 1, 0, 0); tctx.font = `${o.boyut}px ${YAZI_TIPI}`;
@@ -353,7 +410,7 @@ function cevre(o) {   // sekillerin dis hatti, nokta dizisi olarak
 function dokunuyor(o, x, y, r) {
   const k = kutu(o);
   if (x < k[0] - r || x > k[2] + r || y < k[1] - r || y > k[3] + r) return false;
-  if (o.k === 'metin' || o.k === 'defter') return true;
+  if (o.k === 'metin' || o.k === 'defter' || o.k === 'resim') return true;
   if (o.k === 'yol') {
     const n = o.n, esik = r + o.w / 2;
     if (n.length === 3) return Math.hypot(x - n[0], y - n[1]) <= esik;
@@ -438,6 +495,16 @@ function ogeCiz(ctx, o) {
     ctx.stroke();
     ctx.fillStyle = css('--murekkep'); ctx.font = `600 12px ${YAZI_TIPI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     const ad = o.ad || 'Not'; ctx.fillText(ad.length > 13 ? ad.slice(0, 12) + '…' : ad, x + 23, y + 57);
+  } else if (o.k === 'resim') {
+    const r = resimAl(o.id);
+    if (r.img) ctx.drawImage(r.img, o.x, o.y, o.w, o.h);
+    else {
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(o.x, o.y, o.w, o.h);
+      ctx.fillStyle = '#6b6962'; ctx.font = `15px ${YAZI_TIPI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(r.durum === 'yok' ? 'Bu sayfanın görüntüsü bulunamadı' : `${o.ad || 'Belge'} · sayfa ${o.sayfa || 1} hazırlanıyor…`,
+                   o.x + o.w / 2, o.y + Math.min(o.h / 2, 60));
+    }
+    ctx.strokeStyle = css('--panel-kenar'); ctx.lineWidth = 1; ctx.strokeRect(o.x + .5, o.y + .5, o.w - 1, o.h - 1);
   } else if (o.k === 'metin') {
     ctx.font = `${o.boyut}px ${YAZI_TIPI}`; ctx.textBaseline = 'top';
     o.metin.split('\n').forEach((s, i) => ctx.fillText(s, o.x, o.y + i * o.boyut * 1.3 + o.boyut * 0.12));
@@ -485,7 +552,7 @@ function simdiCiz() {
   tctx.clearRect(0, 0, taban.width, taban.height);
   tctx.setTransform(dpr, 0, 0, dpr, 0, -ust * dpr);
   kagitCiz(tctx, ust, alt, gen, kagit);
-  for (const o of ogeler) { const k = kutu(o); if (k[3] >= ust && k[1] <= alt) ogeCiz(tctx, o); }
+  for (const o of katmanli(ogeler)) { const k = kutu(o); if (k[3] >= ust && k[1] <= alt) ogeCiz(tctx, o); }
   canliCiz();
 }
 let canliOge = null, silgiNokta = null;
@@ -536,6 +603,8 @@ function yinele() {
 let kayitZamanlayici = 0;
 function degisti() {
   $('#geri').disabled = !geriYigin.length; $('#ileri').disabled = !ileriYigin.length;
+  document.body.classList.toggle('bos', !ogeler.length && !yigin.length);
+  belgeListesiGuncelle();
   boyuGuncelle(); ciz();
   clearTimeout(kayitZamanlayici); kayitZamanlayici = setTimeout(kaydet, 400);
 }
@@ -552,7 +621,8 @@ function kaydet() {
 function yukleVeri(v) {
   if (!v || !Array.isArray(v.ogeler)) throw new Error('Geçersiz dosya');
   const temiz = l => l.filter(o => {
-    if (!o || !['yol', 'metin', 'cizgi', 'ok', 'kutu', 'elips', 'defter'].includes(o.k)) return false;
+    if (!o || !['yol', 'metin', 'cizgi', 'ok', 'kutu', 'elips', 'defter', 'resim'].includes(o.k)) return false;
+    if (o.k === 'resim' && !(typeof o.id === 'string' && [o.x, o.y, o.w, o.h].every(Number.isFinite) && o.w > 0 && o.h > 0)) return false;
     if (o.k === 'defter') o.ic = { ogeler: temiz(o.ic && Array.isArray(o.ic.ogeler) ? o.ic.ogeler : []) };
     return true;
   });
@@ -573,7 +643,7 @@ let aktif = null;   // { id, mod, ... }
 let silinen = null, silOnce = null, silDegisti = false;
 
 canli.addEventListener('pointerdown', e => {
-  if (aktif || (e.pointerType === 'mouse' && e.button !== 0)) return;
+  if (aktif || (e.pointerType === 'mouse' && e.button !== 0) || document.body.classList.contains('bitiyor')) return;
   metniBitir();
   const [x, y] = nokta(e);
   if (e.pointerType === 'touch' && !parmakCiz) {       // parmak = kaydirma
@@ -676,14 +746,14 @@ canli.addEventListener('contextmenu', e => e.preventDefault());
 function sil(x, y) {
   const r = ayar.silgi.w; let oldu = false;
   for (let i = ogeler.length - 1; i >= 0; i--)
-    if (dokunuyor(ogeler[i], x, y, r)) { silinen.push([i, ogeler[i]]); ogeler.splice(i, 1); oldu = true; }
+    if (ogeler[i].k !== 'resim' && dokunuyor(ogeler[i], x, y, r)) { silinen.push([i, ogeler[i]]); ogeler.splice(i, 1); oldu = true; }
   if (oldu) ciz();
 }
 function noktaSil(x, y) {
   const r = ayar.nokta.w; let oldu = false;
   for (let i = ogeler.length - 1; i >= 0; i--) {
     const o = ogeler[i];
-    if (o.k === 'metin' || o.k === 'defter' || !dokunuyor(o, x, y, r)) continue;
+    if (o.k === 'metin' || o.k === 'defter' || o.k === 'resim' || !dokunuyor(o, x, y, r)) continue;
     const kalan = parcala(o, x, y, r);
     if (kalan) { ogeler.splice(i, 1, ...kalan); oldu = true; }
   }
@@ -730,7 +800,7 @@ function onizlemeGoster(o) {
   g.setTransform(dpr, 0, 0, dpr, 0, 0); g.fillStyle = css('--kagit'); g.fillRect(0, 0, 240, 170);
   g.setTransform(dpr * olcek, 0, 0, dpr * olcek, 0, 0);
   kagitCiz(g, 0, 170 / olcek, gen, kagit);
-  for (const i of o.ic.ogeler) if (kutu(i)[1] <= 170 / olcek) ogeCiz(g, i);
+  for (const i of katmanli(o.ic.ogeler)) if (kutu(i)[1] <= 170 / olcek) ogeCiz(g, i);
   const n = o.ic.ogeler.length, alt = kutucuk.querySelector('div'), ad = document.createElement('b');
   ad.textContent = o.ad || 'Not'; alt.textContent = ''; alt.append(ad, n ? ' · açmak için tıklayın' : ' · boş');
   kutucuk.hidden = false;
@@ -897,16 +967,16 @@ function indir(blob, ad) {
   a.href = URL.createObjectURL(blob); a.download = ad; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
-function pngTuval(liste = ogeler) {
+function pngTuval(liste = ogeler, enFazlaOlcek = 2) {
   let alt = 0; for (const o of liste) alt = Math.max(alt, kutu(o)[3]);
-  const boy = Math.max(200, alt + 40), olcek = Math.min(2, 16000 / boy);
+  const boy = Math.max(200, alt + 40), olcek = Math.min(enFazlaOlcek, 16000 / boy);
   const c = document.createElement('canvas');
   c.width = Math.round(gen * olcek); c.height = Math.round(boy * olcek);
   const x = c.getContext('2d');
   x.fillStyle = css('--kagit'); x.fillRect(0, 0, c.width, c.height);
   x.setTransform(olcek, 0, 0, olcek, 0, 0);
   kagitCiz(x, 0, boy, gen, kagit);
-  for (const o of liste) ogeCiz(x, o);
+  for (const o of katmanli(liste)) ogeCiz(x, o);
   return c;
 }
 $('#png').onclick = () => pngTuval().toBlob(b => indir(b, dosyaAdi('png')), 'image/png');
@@ -1057,6 +1127,10 @@ document.addEventListener('keydown', e => {
     e.preventDefault(); return;
   }
   if (e.target.matches('input, textarea')) return;
+  const sade = !e.ctrlKey && !e.metaKey && !e.altKey;
+  if (sade && ['PageDown', 'PageUp', 'ArrowRight', 'ArrowLeft'].includes(e.key)) {   // sunum kumandasi bu tuslari gonderir
+    e.preventDefault(); sayfayaGit(e.key === 'PageDown' || e.key === 'ArrowRight' ? 1 : -1); return;
+  }
   const k = e.key.toLowerCase();
   if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); e.shiftKey ? yinele() : geriAl(); }
   else if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault(); yinele(); }
@@ -1066,20 +1140,325 @@ document.addEventListener('keydown', e => {
   }
 });
 
+
+/* ------------------------------------------------------------------ belgeler: PDF, sunum, Word, resim */
+// Sayfalar resim olarak IndexedDB'de saklanir (localStorage'a sigmaz); defter verisinde yalnizca kimlikleri durur.
+const resimler = new Map();           // sayfa kimligi -> { img, durum: 'yukleniyor' | 'hazirlaniyor' | 'hazir' | 'yok' }
+let belgeIsleniyor = 0, belgeKuyrugu = Promise.resolve(), pdfjsSoz = null, sonListe = '';
+const EN_FAZLA_SAYFA = 150, EN_BUYUK_OFIS = 30 * 1024 * 1024;
+const katmanli = l => { const r = [], d = []; for (const o of l) (o.k === 'resim' ? r : d).push(o); return r.concat(d); };
+const kok = yol => new URL(yol, location.href).href;
+const idb = (() => {
+  let db = null;
+  const ac = () => db || (db = new Promise((ok, hata) => {
+    const r = indexedDB.open('ders-defteri-belgeler', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('sayfa');
+    r.onsuccess = () => ok(r.result); r.onerror = () => hata(r.error);
+  }));
+  const islem = (mod, f) => ac().then(v => new Promise((ok, hata) => {
+    const t = v.transaction('sayfa', mod), istek = f(t.objectStore('sayfa'));
+    t.oncomplete = () => ok(istek && istek.result); t.onerror = t.onabort = () => hata(t.error);
+  }));
+  return { yaz: (k, v) => islem('readwrite', s => s.put(v, k)), oku: k => islem('readonly', s => s.get(k)),
+           temizle: () => islem('readwrite', s => s.clear()) };
+})();
+function resimAl(id) {
+  let r = resimler.get(id);
+  if (r) return r;
+  r = { img: null, durum: 'yukleniyor' }; resimler.set(id, r);
+  idb.oku(id).then(b => { if (b) resimYerlestir(id, b); else { r.durum = 'yok'; ciz(); } })
+             .catch(() => { r.durum = 'yok'; ciz(); });
+  return r;
+}
+function resimYerlestir(id, blob) {
+  const r = resimler.get(id) || {}; resimler.set(id, r);
+  const img = new Image();
+  img.onload = () => { r.img = img; r.durum = 'hazir'; ciz(); };
+  img.onerror = () => { r.durum = 'yok'; ciz(); };
+  img.src = URL.createObjectURL(blob);
+}
+async function resimKaydet(id, blob) {
+  try { await idb.yaz(id, blob); } catch (e) { /* gizli pencere / kota: yalnizca bellekte kalir */ }
+  resimYerlestir(id, blob);
+}
+function resimleriTemizle() {
+  for (const r of resimler.values()) if (r.img) URL.revokeObjectURL(r.img.src);
+  resimler.clear(); idb.temizle().catch(() => {});
+}
+const yeniBelgeId = () => 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+function belgeAlani() {   // gorunen yazi alani (acik arac panelinin altinda kalmasin)
+  const sag = document.body.classList.contains('panel-kapali') ? 0 : $('#panel').offsetWidth + 10;
+  const kullanilir = Math.max(260, gen - sag - 48);
+  return { x: 24, w: Math.min(kullanilir, 1600) };
+}
+function sayfalariYerlestir(belge, ad, boyutlar, ust) {
+  const alan = belgeAlani(), once = ogeler.slice(), eklenen = [];
+  const dolu = ogeler.filter(o => o.k === 'resim');
+  const bosYer = (y, h) => {   // baska bir belge sayfasiyla cakisiyorsa onun altina kaydir
+    for (let tekrar = true; tekrar;) {
+      tekrar = false;
+      for (const r of dolu) if (y < r.y + r.h + 12 && y + h + 12 > r.y) { y = r.y + r.h + 24; tekrar = true; }
+    }
+    return y;
+  };
+  let y = Math.max(8, Math.round(ust));
+  boyutlar.forEach(([en, boy], i) => {
+    const w = Math.round(boy > en ? Math.min(alan.w, 960) : alan.w), h = Math.round(w * boy / en);
+    y = bosYer(y, h);
+    const o = { k: 'resim', id: `${belge}-${i + 1}`, belge, ad, sayfa: i + 1,
+                x: Math.round(alan.x + (alan.w - w) / 2), y, w, h, t: Date.now() };
+    dolu.push(o);
+    resimler.set(o.id, { img: null, durum: 'hazirlaniyor' });
+    ogeler.push(o); eklenen.push(o); y += h + 24;
+  });
+  yap({ a: 'anlik', once, sonra: ogeler.slice() });
+  boyuGuncelle(y);
+  const ilk = eklenen[0];
+  if (ilk && (ilk.y < kaydir.scrollTop || ilk.y > kaydir.scrollTop + yuk - 80)) kaydir.scrollTo({ top: Math.max(0, ilk.y - 16), behavior: 'smooth' });
+  return eklenen;
+}
+const sonAlt = l => l.length ? l[l.length - 1].y + l[l.length - 1].h : 0;
+const tuvaldenBlob = (c, tur, kalite) => new Promise((ok, hata) => c.toBlob(b => b ? ok(b) : hata(new Error('Resim oluşturulamadı')), tur, kalite));
+
+function pdfjsYukle() {   // pdf.js projeye gomulu (internet gerekmez); Windows'taki MIME sorunlarina karsi blob ile yuklenir
+  if (pdfjsSoz) return pdfjsSoz;
+  pdfjsSoz = (async () => {
+    const metin = async ad => {
+      const r = await fetch(kok('pdfjs/' + ad));
+      if (!r.ok) throw new Error(`PDF okuyucu yüklenemedi (pdfjs/${ad})`);
+      return r.text();
+    };
+    const [kutuphane, isci] = await Promise.all([metin('pdf.min.mjs'), metin('pdf.worker.min.mjs')]);
+    const blobUrl = t => URL.createObjectURL(new Blob([t], { type: 'text/javascript' }));
+    const pdfjs = await import(blobUrl(kutuphane));
+    pdfjs.GlobalWorkerOptions.workerPort = new Worker(blobUrl(isci), { type: 'module' });
+    return pdfjs;
+  })();
+  pdfjsSoz.catch(() => { pdfjsSoz = null; });
+  return pdfjsSoz;
+}
+async function pdfSayfaResmi(sayfa, enCss) {
+  const v1 = sayfa.getViewport({ scale: 1 });
+  let olcek = Math.min(2600, Math.round(enCss * Math.min(2, Math.max(1.5, dpr)))) / v1.width;
+  if (v1.width * v1.height * olcek * olcek > 12e6) olcek = Math.sqrt(12e6 / (v1.width * v1.height));
+  const v = sayfa.getViewport({ scale: olcek }), c = document.createElement('canvas');
+  c.width = Math.ceil(v.width); c.height = Math.ceil(v.height);
+  await sayfa.render({ canvas: c, viewport: v, background: '#ffffff' }).promise;
+  const blob = await tuvaldenBlob(c, 'image/jpeg', 0.9);
+  c.width = c.height = 0;
+  return blob;
+}
+async function pdfEkle(veri, ad, ust) {
+  durumYaz(`${ad} açılıyor…`, 600000);
+  const pdfjs = await pdfjsYukle();
+  let pdf;
+  try {
+    // isEvalSupported:false -> bilinen pdf.js guvenlik acigina (CVE-2024-4367) karsi ek onlem
+    pdf = await pdfjs.getDocument({ data: new Uint8Array(veri), isEvalSupported: false, enableXfa: false,
+      standardFontDataUrl: kok('pdfjs/standard_fonts/'), wasmUrl: kok('pdfjs/wasm/') }).promise;
+  } catch (e) {
+    throw new Error(e && e.name === 'PasswordException' ? 'PDF şifreli. Şifresiz bir kopyasını bırakın.'
+                                                       : 'PDF açılamadı; dosya bozuk olabilir.');
+  }
+  try {
+    const n = Math.min(pdf.numPages, EN_FAZLA_SAYFA), sayfalar = [];
+    if (pdf.numPages > n) bildir(`${ad}: ilk ${n} sayfa eklendi (toplam ${pdf.numPages} sayfa).`);
+    for (let i = 1; i <= n; i++) { const s = await pdf.getPage(i), v = s.getViewport({ scale: 1 }); sayfalar.push([s, v.width, v.height]); }
+    const yerler = sayfalariYerlestir(yeniBelgeId(), ad, sayfalar.map(x => [x[1], x[2]]), ust);
+    for (let i = 0; i < sayfalar.length; i++) {
+      durumYaz(n > 1 ? `${ad}: sayfa ${i + 1} / ${n}` : `${ad} hazırlanıyor…`, 600000);
+      try { await resimKaydet(yerler[i].id, await pdfSayfaResmi(sayfalar[i][0], yerler[i].w)); }
+      catch (e) { const r = resimler.get(yerler[i].id); if (r) r.durum = 'yok'; ciz(); }
+      sayfalar[i][0].cleanup();
+    }
+    durumYaz(`${ad} eklendi`);
+    return sonAlt(yerler);
+  } finally { pdf.destroy(); }
+}
+async function resimEkle(f, ust) {
+  const url = URL.createObjectURL(f);
+  try {
+    const img = new Image(); img.src = url;
+    try { await img.decode(); } catch (e) { throw new Error('Resim açılamadı.'); }
+    const en = img.naturalWidth || 1200, boy = img.naturalHeight || 900;
+    let blob = f;
+    if (en > 2600 || en * boy > 12e6 || !/^image\/(png|jpeg|gif|webp)$/.test(f.type)) {   // buyukse kucult, svg/bmp -> png
+      const o = Math.min(1, 2600 / en, Math.sqrt(12e6 / (en * boy))), c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(en * o)); c.height = Math.max(1, Math.round(boy * o));
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      blob = await tuvaldenBlob(c, f.type === 'image/jpeg' ? 'image/jpeg' : 'image/png', 0.9);
+    }
+    const yerler = sayfalariYerlestir(yeniBelgeId(), f.name, [[en, boy]], ust);
+    await resimKaydet(yerler[0].id, blob);
+    return sonAlt(yerler);
+  } finally { URL.revokeObjectURL(url); }
+}
+const dosyaBase64 = f => new Promise((ok, hata) => {
+  const r = new FileReader();
+  r.onload = () => ok(String(r.result).split(',', 2)[1] || ''); r.onerror = () => hata(new Error('Dosya okunamadı'));
+  r.readAsDataURL(f);
+});
+async function ofisEkle(f, ust) {   // PowerPoint / Word: bilgisayardaki Office ya da LibreOffice ile PDF'e cevrilir
+  const kopru = window.__kopru;
+  if (!kopru || !kopru.donusturebilir())
+    throw new Error('Sunum ve Word dosyaları yalnızca ders panelinde açılabilir. Dosyayı PDF olarak kaydedip bırakın.');
+  if (f.size > EN_BUYUK_OFIS)
+    throw new Error('Dosya 30 MB\'tan büyük. PowerPoint\'te Dosya > Farklı Kaydet > PDF ile kaydedip PDF\'i bırakın.');
+  durumYaz(`${f.name} PDF'e çevriliyor…`, 600000);
+  const pdf64 = await kopru.donustur(f.name, await dosyaBase64(f));
+  const veri = await (await fetch('data:application/pdf;base64,' + pdf64)).arrayBuffer();
+  return pdfEkle(veri, f.name, ust);
+}
+function dosyaTuru(f) {
+  const ad = f.name || '';
+  if (f.type === 'application/pdf' || /\.pdf$/i.test(ad)) return 'pdf';
+  if (/^image\//.test(f.type) || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(ad)) return 'resim';
+  if (/\.(pptx?|ppsx?|potx?|odp|key|docx?|odt|rtf)$/i.test(ad)) return 'ofis';
+  return null;
+}
+async function dosyaEkle(f, ust) {
+  const tur = dosyaTuru(f);
+  if (!tur) throw new Error('bu dosya türü açılamıyor. PDF, PowerPoint, Word ya da resim bırakın.');
+  belgeIsleniyor++;
+  try {
+    if (tur === 'pdf') return await pdfEkle(await f.arrayBuffer(), f.name, ust);
+    if (tur === 'resim') return await resimEkle(f, ust);
+    return await ofisEkle(f, ust);
+  } finally { belgeIsleniyor--; }
+}
+function dikkatCek() { const b = $('#ders-dugme'); b.classList.remove('dikkat'); void b.offsetWidth; b.classList.add('dikkat'); }
+function dosyalariEkle(dosyalar, y) {
+  const liste = Array.from(dosyalar || []);
+  if (!liste.length) return;
+  if (!(dersBas && !dersBit) || document.body.classList.contains('bitiyor')) { durumYaz('Önce dersi başlatın'); dikkatCek(); return; }
+  metniBitir(); onizlemeGizle();
+  belgeKuyrugu = belgeKuyrugu.then(async () => {
+    let ust = y;
+    for (const f of liste) {
+      try { ust = (await dosyaEkle(f, ust)) + 32; }
+      catch (e) { durumYaz('Eklenemedi'); bildir(`${f.name}: ${(e && e.message) || e}`); }
+    }
+  });
+}
+function gorunurUst() { return kaydir.scrollTop + 20; }
+$('#belge-dugme').onclick = $('#belge-ekle-panel').onclick = () => $('#belge-dosya').click();
+$('#belge-dosya').onchange = e => { const l = Array.from(e.target.files || []); e.target.value = ''; dosyalariEkle(l, gorunurUst()); };
+
+// Surukle-birak: tarayicinin dosyayi kendisi acmasini (sayfadan cikmayi) her durumda engeller
+let surukleSayac = 0;
+const dosyaVar = e => !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+const surukleBitti = () => { surukleSayac = 0; document.body.classList.remove('surukleniyor'); };
+document.addEventListener('dragenter', e => { if (!dosyaVar(e)) return; e.preventDefault(); surukleSayac++; document.body.classList.add('surukleniyor'); });
+document.addEventListener('dragover', e => { if (!dosyaVar(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+document.addEventListener('dragleave', e => {
+  if (!dosyaVar(e)) return;
+  surukleSayac = Math.max(0, surukleSayac - 1);
+  const disarida = e.clientX <= 0 || e.clientY <= 0 || e.clientX >= innerWidth || e.clientY >= innerHeight;
+  if (!surukleSayac || disarida) surukleBitti();
+});
+document.addEventListener('drop', e => {
+  if (!dosyaVar(e)) return;
+  e.preventDefault(); surukleBitti();
+  const r = kaydir.getBoundingClientRect();
+  dosyalariEkle(e.dataTransfer.files, Math.max(0, e.clientY - r.top) + kaydir.scrollTop - 20);
+});
+
+// Panel: bu defterdeki belgeler
+function belgeListesiGuncelle() {
+  const grup = new Map();
+  for (const o of ogeler) if (o.k === 'resim') {
+    const g = grup.get(o.belge) || { ad: o.ad, sayfa: 0, y: o.y };
+    g.sayfa++; g.y = Math.min(g.y, o.y); grup.set(o.belge, g);
+  }
+  const imza = JSON.stringify([...grup]);
+  if (imza === sonListe) return;
+  sonListe = imza;
+  const kutucuk = $('#belge-listesi'); kutucuk.textContent = '';
+  if (!grup.size) { const p = document.createElement('p'); p.className = 'not'; p.style.margin = '0 0 8px'; p.textContent = 'Henüz belge yok.'; kutucuk.append(p); return; }
+  for (const [id, g] of grup) {
+    const satir = document.createElement('div'), ad = document.createElement('span'), bilgi = document.createElement('span');
+    const git = document.createElement('button'), kaldir = document.createElement('button');
+    satir.className = 'belge-satir'; ad.className = 'belge-ad'; bilgi.className = 'belge-bilgi';
+    ad.textContent = g.ad || 'Belge'; ad.title = g.ad || ''; bilgi.textContent = g.sayfa > 1 ? `${g.sayfa} sf` : '';
+    git.textContent = 'Git'; git.title = 'Belgenin ilk sayfasına git';
+    git.onclick = () => kaydir.scrollTo({ top: Math.max(0, g.y - 16), behavior: 'smooth' });
+    kaldir.textContent = 'Kaldır'; kaldir.className = 'tehlike'; kaldir.title = 'Belgeyi defterden kaldır (geri alınabilir)';
+    kaldir.onclick = () => belgeKaldir(id);
+    satir.append(ad, bilgi, git, kaldir); kutucuk.append(satir);
+  }
+}
+function belgeKaldir(id) {
+  const once = ogeler.slice();
+  ogeler = ogeler.filter(o => !(o.k === 'resim' && o.belge === id));
+  if (ogeler.length !== once.length) { yap({ a: 'anlik', once, sonra: ogeler.slice() }); durumYaz('Belge kaldırıldı'); }
+}
+function sayfayaGit(yon) {   // sonraki / onceki belge sayfasinin basina; belge yoksa bir ekran
+  const ust = kaydir.scrollTop, sayfalar = ogeler.filter(o => o.k === 'resim').map(o => o.y - 16).sort((a, b) => a - b);
+  let hedef = yon > 0 ? sayfalar.find(y => y > ust + 4) : sayfalar.reverse().find(y => y < ust - 4);
+  if (hedef === undefined) hedef = ust + yon * yuk * 0.9;
+  const azHareket = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  kaydir.scrollTo({ top: Math.max(0, hedef), behavior: azHareket ? 'auto' : 'smooth' });
+}
+
+// Bildirim (uzun mesajlar icin)
+let bildirimZ = 0;
+function bildir(metin, ms = 8000) {
+  const b = $('#bildirim'); b.querySelector('span').textContent = metin; b.hidden = false;
+  clearTimeout(bildirimZ); bildirimZ = setTimeout(() => { b.hidden = true; }, ms);
+}
+$('#bildirim button').onclick = () => { $('#bildirim').hidden = true; };
+
+// Tam ekran: arayuzun icindeyken butun sayfa (Streamlit), tek basina acildiysa bu sayfa
+const tamEkran = {
+  belge() { try { if (window.parent !== window && window.parent.document) return window.parent.document; } catch (e) {} return document; },
+  acikMi() { const d = this.belge(); return !!(d.fullscreenElement || d.webkitFullscreenElement); },
+  iste() {
+    if (this.acikMi()) return Promise.resolve(true);
+    const el = this.belge().documentElement, f = el.requestFullscreen || el.webkitRequestFullscreen;
+    try { return Promise.resolve(f && f.call(el)).then(() => this.acikMi(), () => false); } catch (e) { return Promise.resolve(false); }
+  },
+  cik() {
+    if (!this.acikMi()) return;
+    const d = this.belge(), f = d.exitFullscreen || d.webkitExitFullscreen;
+    try { const s = f && f.call(d); if (s && s.catch) s.catch(() => {}); } catch (e) {}
+  },
+};
+window.__tamEkran = tamEkran;
+function tamDugmeYaz() {
+  const k = window.__kopru, acik = k && k.yonetilen() ? k.tamMi() : tamEkran.acikMi();
+  $('#tam-yazi').textContent = acik ? 'Küçült' : 'Tam ekran';
+  $('#tam-dugme').title = acik ? 'Tam ekrandan çık' : 'Tam ekran';
+  $('#tam-ikon').setAttribute('d', acik ? 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5' : 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5');
+}
+$('#tam-dugme').onclick = () => {
+  const k = window.__kopru;
+  if (k && k.yonetilen()) return k.tamEkranDegistir();
+  (tamEkran.acikMi() ? (tamEkran.cik(), Promise.resolve()) : tamEkran.iste()).then(() => setTimeout(tamDugmeYaz, 120));
+};
+document.addEventListener('fullscreenchange', tamDugmeYaz);
+$('#uyari-cip').onclick = () => { const t = $('#uyari-cip').title; if (t) bildir(t, 12000); };
+
 /* ------------------------------------------------------------------ baslangic */
 try {
   const kayit = localStorage.getItem(ANAHTAR);
   if (kayit) yukleVeri(JSON.parse(kayit));
   if (localStorage.getItem(ANAHTAR + '-panel') === '0') { document.body.classList.add('panel-kapali'); $('#kulak').setAttribute('aria-expanded', 'false'); }
 } catch (e) { ogeler = []; }
-kagitSec(kagit); kagitRenkSec(kagitRenk); aracSec('kalem'); dersYaz(); sayacYaz(); saatYaz(); setInterval(() => { if (!mesajVar) saatYaz(); }, 20000);
+kagitSec(kagit); kagitRenkSec(kagitRenk); aracSec('kalem'); dersYaz(); sayacYaz(); saatYaz(); tamDugmeYaz();
+document.body.classList.toggle('bos', !ogeler.length); belgeListesiGuncelle(); setInterval(() => { if (!mesajVar) saatYaz(); }, 20000);
 $('#geri').disabled = $('#ileri').disabled = true;
 new ResizeObserver(boyutla).observe(kaydir);
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { ciz(); onizle(); });
 boyutla();
-window.__defter = { get ogeler() { return ogeler; }, veri, png: () => pngTuval(veri().ogeler).toDataURL('image/png'),
+window.__defter = { get ogeler() { return ogeler; }, veri, metniBitir, durumYaz, bildir, tamDugmeYaz,
+  // belge (slayt) varken arsiv resmi daha dusuk olcekle uretilir: dosya boyutu makul kalsin
+  png: () => { const l = veri().ogeler; return pngTuval(l, l.some(o => o.k === 'resim') ? 1.25 : 2).toDataURL('image/png'); },
+  belgeVar: () => veri().ogeler.some(o => o.k === 'resim') || ogeler.some(o => o.k === 'resim'),
+  belgeIsleniyor: () => belgeIsleniyor > 0,
+  resimlerHazir: () => veri().ogeler.every(o => o.k !== 'resim' || ['hazir', 'yok'].includes(resimAl(o.id).durum)),
   // yeni ders: bos sayfa (onceki ders arayuzde arsivlendi)
   yeniSayfa: () => { metniBitir(); yigin = []; ogeler = []; geriYigin = []; ileriYigin = []; belgeBoyu = 0;
+                     resimleriTemizle();
                      baglamGuncelle(); degisti(); kaydir.scrollTop = 0; simdiCiz(); } };   // diger modullerin okuyabilmesi icin
 })();
 </script>
@@ -1088,10 +1467,17 @@ window.__defter = { get ogeler() { return ogeler; }, veri, png: () => pngTuval(v
      Bu sayfa arayuzun icinde (Streamlit bileseni olarak) acildiginda calisir; tek basina acilinca hicbir sey yapmaz.
 
      YONETILEN MOD (arayuz args.kimlik gonderir; ogretmen panelinde "Dersi Baslat" ile kullanilan):
-       - Her yeni ders (yeni kimlik) BOS bir sayfayla acilir, ders adi yazilir, ders otomatik baslar (yazma kilidi acilir).
-       - Defterin kendi "Dersi baslat/bitir" dugmesi gizlenir: ders arayuzden baslar/biter.
-       - Tahta degistikce birkac saniyede bir arayuze {olay:"kaydet", kimlik, zaman, veri, png} gonderilir;
-         arayuz bunu o dersin sayfasi olarak diske yazar (gosterilmez). args.bitiyor gelince hemen son kez kaydeder.
+       - Her yeni ders (yeni kimlik) BOS bir sayfayla acilir, ders adi yazilir, ders otomatik baslar.
+       - args.tam_ekran: tahta butun pencereyi kaplar (CSS'i arayuz ekler); ilk dokunusta tarayici da tam ekrana gecer.
+       - Defterin kendi "Dersi baslat/bitir" dugmesi gizlenir; ust cubuktaki "Dersi bitir" arayuze olay gonderir.
+       - Tahta degistikce arayuze {olay:"kaydet", kimlik, zaman, veri, png} gonderilir (arayuz diske yazar).
+     KONTROL OLAYLARI (yanit beklenir; arayuz args.onay ile isledigi son olayin zamanini geri yollar):
+       {olay:"bitir", veri, png}            -> son hali kaydet ve kaydi durdur
+       {olay:"tam_ekran", acik}             -> tam ekran ac / kapat
+       {olay:"belge_donustur", istek, ad, veri(base64)} -> PowerPoint/Word -> PDF; yanit args.belge {istek, pdf | hata}
+       {olay:"belge_alindi", istek}         -> buyuk PDF yaniti artik gonderilmesin
+     Streamlit art arda gelen iki degerden ilkini kaybedebilir; bu yuzden kontrol olayi yanit beklerken otomatik
+     kayit bekletilir ve olay yanit gelene kadar birkac kez yeniden gonderilir.
      ESKI MOD (kimlik yok): "Dersi baslat/bitir" -> {olay:"basladi"} / {olay:"bitti", veri, png}. -->
 <script>
 (() => {
@@ -1099,23 +1485,43 @@ window.__defter = { get ogeler() { return ogeler; }, veri, png: () => pngTuval(v
   if (window.parent === window) return;               // tek basina acildi: kopru kapali
   const gonder = (tip, ek) => window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type: tip }, ek || {}), '*');
   const deger = v => gonder('streamlit:setComponentValue', { value: v, dataType: 'json' });
-  const dugme = document.getElementById('ders-dugme');
-  const KIMLIK_ANAHTARI = 'ders-asistani-tahta-kimlik';
+  const $ = s => document.querySelector(s);
+  const dugme = $('#ders-dugme'), bitirDugme = $('#bitir-dugme');
+  const KIMLIK_ANAHTARI = 'ders-asistani-tahta-kimlik', ANAHTAR_OGRETICI = 'ders-defteri-v1-ogretici';
   const ls = {
     al: k => { try { return localStorage.getItem(k); } catch (e) { return null; } },
     yaz: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} },
   };
   let yukseklik = 760, kimlik = null, sonGonderilen = null, bekleyen = 0, sonKayit = 0;
-
+  let tamMod = false, tamIstendi = false, bitiriliyor = false;
   const suruyor = () => { const v = window.__defter.veri(); return !!(v.dersBaslangic && !v.dersBitis); };
 
-  // ---- yonetilen mod: otomatik kayit ----
-  function kaydetGonder() {
-    const d = window.__defter; if (!d || !kimlik) return;
+  // ---- kontrol olaylari: yanit (args.onay) gelene kadar bekletilir ----
+  let bekleyenKontrol = null, kontrolTekrar = true, kontrolDeneme = 0;
+  function kontrolGonder(olay, tekrarla = true) {
+    bekleyenKontrol = Object.assign({}, olay, { kimlik, zaman: Date.now() });
+    kontrolTekrar = tekrarla; kontrolDeneme = 0;
     clearTimeout(bekleyen); bekleyen = 0;
-    const v = d.veri();
-    const imza = JSON.stringify(v.ogeler);
+    deger(bekleyenKontrol);
+  }
+  setInterval(() => {
+    if (!bekleyenKontrol) return;
+    if (kontrolTekrar) {
+      if (kontrolDeneme++ < 4) deger(bekleyenKontrol);
+      else bekleyenKontrol = null;                    // yanit gelmedi: otomatik kaydi kilitli birakma
+    } else if (Date.now() - bekleyenKontrol.zaman > 300000) bekleyenKontrol = null;
+  }, 4000);
+
+  // ---- otomatik kayit ----
+  function kaydetGonder(zorla) {
+    const d = window.__defter; if (!d || !kimlik || bitiriliyor) return;
+    clearTimeout(bekleyen); bekleyen = 0;
+    if (bekleyenKontrol) { bekleyen = setTimeout(kaydetGonder, 1500, zorla); return; }
+    const v = d.veri(), imza = JSON.stringify(v.ogeler);
     if (!v.ogeler.length || imza === sonGonderilen) return;   // bos sayfa ya da degisiklik yok
+    if (d.belgeIsleniyor() || !d.resimlerHazir()) { bekleyen = setTimeout(kaydetGonder, 2000, zorla); return; }
+    const kalan = d.belgeVar() && !zorla ? 30000 - (Date.now() - sonKayit) : 0;   // slayt varken resim buyuk: 30 sn'de bir
+    if (kalan > 0) { bekleyen = setTimeout(kaydetGonder, kalan); return; }
     let png = null;
     try { png = d.png(); } catch (e) { return; }
     sonGonderilen = imza; sonKayit = Date.now();
@@ -1128,8 +1534,70 @@ window.__defter = { get ogeler() { return ogeler; }, veri, png: () => pngTuval(v
     bekleyen = setTimeout(() => kaydetGonder(), Date.now() - sonKayit > 15000 ? 300 : 2500);
   }
   ['pointerup', 'keyup', 'touchend'].forEach(t => document.addEventListener(t, birazSonraKaydet, true));
-  setInterval(() => kaydetGonder(), 10000);    // her ihtimale karsi (geri al / temizle vb.)
+  setInterval(() => kaydetGonder(), 10000);    // her ihtimale karsi (geri al / temizle / belge eklendi vb.)
 
+  // ---- PowerPoint / Word -> PDF (arayuz bilgisayardaki Office ya da LibreOffice ile cevirir) ----
+  let bekleyenBelge = null;
+  const islenenIstekler = new Set();
+  function donustur(ad, veri) {
+    return new Promise((ok, hata) => {
+      if (bekleyenBelge) return hata(new Error('önceki dosya hâlâ çevriliyor; bitince tekrar deneyin.'));
+      const istek = 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      const z = setTimeout(() => {
+        if (bekleyenBelge && bekleyenBelge.istek === istek) {
+          bekleyenBelge = null;
+          hata(new Error('dönüştürme 4 dakikada bitmedi. Dosyayı PDF olarak kaydedip bırakın.'));
+        }
+      }, 240000);
+      bekleyenBelge = { istek, ok, hata, z };
+      kontrolGonder({ olay: 'belge_donustur', istek, ad, veri }, false);   // buyuk veri: yeniden gonderilmez
+    });
+  }
+
+  // ---- tam ekran ----
+  function tamModAyarla(acik) {
+    if (acik === tamMod) return;
+    tamMod = acik;
+    document.body.classList.toggle('tam-ekran', acik);
+    if (acik) {
+      tamIstendi = false;
+      window.__tamEkran.iste().then(ok => { if (ok) tamIstendi = true; });   // tiklama olmadan izin vermeyebilir
+      try { window.focus(); } catch (e) {}                                    // klavye / sunum kumandasi hemen calissin
+    } else window.__tamEkran.cik();
+    window.__defter.tamDugmeYaz();
+  }
+  // Tarayici tam ekrani bir kullanici hareketi ister: tam ekran modunda ilk dokunusta bir kez denenir
+  document.addEventListener('pointerdown', () => {
+    if (tamMod && !tamIstendi && !bitiriliyor) { tamIstendi = true; window.__tamEkran.iste(); }
+  }, true);
+
+  // ---- dersi bitir (iki adimli onay) ----
+  let bitirZ = 0;
+  function kilitle(mesaj) {
+    document.body.classList.add('kilitli', 'bitiyor');
+    const k = $('#kilit'); k.textContent = mesaj;
+  }
+  bitirDugme.addEventListener('click', () => {
+    if (bitiriliyor || !kimlik) return;
+    if (!bitirDugme.dataset.onay) {
+      bitirDugme.dataset.onay = '1'; bitirDugme.textContent = 'Emin misiniz? Tekrar basın';
+      bitirZ = setTimeout(() => { delete bitirDugme.dataset.onay; bitirDugme.textContent = 'Dersi bitir'; }, 3500);
+      return;
+    }
+    clearTimeout(bitirZ); delete bitirDugme.dataset.onay;
+    const d = window.__defter;
+    d.metniBitir();
+    const v = d.veri();
+    let png = null;
+    try { if (v.ogeler.length) png = d.png(); } catch (e) {}
+    bitiriliyor = true; clearTimeout(bekleyen);
+    bitirDugme.disabled = true; bitirDugme.textContent = 'Bitiriliyor…';
+    window.__tamEkran.cik();
+    kilitle('Ders bitiriliyor. Kayıt duruyor ve notlar hazırlanıyor…');
+    kontrolGonder({ olay: 'bitir', ders: v.ders || '', veri: v, png });
+  });
+
+  // ---- yonetilen ders ----
   function yonetilenDers(yeniKimlik, konu) {
     const d = window.__defter; if (!d) return;
     document.body.classList.add('yonetilen');
@@ -1138,7 +1606,7 @@ window.__defter = { get ogeler() { return ogeler; }, veri, png: () => pngTuval(v
       ls.yaz(ANAHTAR_OGRETICI, 'kapali');               // ogretici ders basinda araya girmesin
       if (suruyor()) dugme.click();                     // onceki dersten acik kalan oturumu kapat
       d.yeniSayfa();
-      const giris = document.getElementById('ders');
+      const giris = $('#ders');
       giris.value = konu || '';
       giris.dispatchEvent(new Event('input', { bubbles: true }));
       ls.yaz(KIMLIK_ANAHTARI, yeniKimlik);
@@ -1149,7 +1617,19 @@ window.__defter = { get ogeler() { return ogeler; }, veri, png: () => pngTuval(v
     if (!suruyor()) dugme.click();                      // yazma kilidini ac, ders sayacini baslat
     kimlik = yeniKimlik;
   }
-  const ANAHTAR_OGRETICI = 'ders-defteri-v1-ogretici';
+
+  window.__kopru = {
+    yonetilen: () => !!kimlik,
+    tamMi: () => tamMod,
+    donusturebilir: () => !!kimlik && !bitiriliyor,
+    donustur,
+    tamEkranDegistir() {
+      if (!kimlik) return;
+      const acilacak = !tamMod;
+      if (acilacak) { tamIstendi = true; window.__tamEkran.iste(); } else window.__tamEkran.cik();   // tiklama aninda
+      kontrolGonder({ olay: 'tam_ekran', acik: acilacak });
+    },
+  };
 
   window.addEventListener('message', e => {
     const m = e.data || {};
@@ -1157,15 +1637,43 @@ window.__defter = { get ogeler() { return ogeler; }, veri, png: () => pngTuval(v
     const a = m.args || {};
     yukseklik = a.yukseklik || yukseklik;
     gonder('streamlit:setFrameHeight', { height: yukseklik });
-    if (a.kimlik) {
-      const k = String(a.kimlik);
-      if (k !== kimlik) yonetilenDers(k, a.konu || '');
-      if (a.bitiyor) kaydetGonder();                // ders bitiyor: son hali hemen gonder
+    if (!a.kimlik) return;
+    const k = String(a.kimlik);
+    if (k !== kimlik) yonetilenDers(k, a.konu || '');
+    if (bekleyenKontrol && a.onay === bekleyenKontrol.zaman) bekleyenKontrol = null;   // arayuz isledi
+    const b = a.belge;
+    if (b && b.istek && !islenenIstekler.has(b.istek)) {
+      islenenIstekler.add(b.istek);
+      if (bekleyenBelge && bekleyenBelge.istek === b.istek) {
+        clearTimeout(bekleyenBelge.z);
+        const { ok, hata } = bekleyenBelge; bekleyenBelge = null;
+        b.hata ? hata(new Error(b.hata)) : ok(b.pdf);
+      }
+      kontrolGonder({ olay: 'belge_alindi', istek: b.istek });
+    }
+    tamModAyarla(!!a.tam_ekran);
+    const cip = $('#uyari-cip');
+    cip.hidden = !a.uyari; cip.textContent = a.uyari || ''; cip.title = a.uyari || '';
+    if (a.bitiyor) {                                    // ders paneldeki "Dersi Bitir" ile de bitebilir
+      if (!bitiriliyor) kaydetGonder(true);             // son hali hemen gonder
+      kilitle('Ders bitiriliyor. Kayıt duruyor ve notlar hazırlanıyor…');
     }
   });
   gonder('streamlit:componentReady', { apiVersion: 1 });
   gonder('streamlit:setFrameHeight', { height: yukseklik });
-  window.addEventListener('pagehide', () => kaydetGonder());
+  window.addEventListener('pagehide', () => kaydetGonder(true));
+
+  // Ust sayfaya (tahtanin disina) birakilan dosya tarayicida acilip uygulamadan cikmasin
+  try {
+    const ust = window.parent;
+    const engelle = e => {
+      const dosya = e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+      const yukleyici = e.target && e.target.closest && e.target.closest('[data-testid="stFileUploader"]');
+      if (dosya && !yukleyici) e.preventDefault();
+    };
+    ust.addEventListener('dragover', engelle); ust.addEventListener('drop', engelle);
+    window.addEventListener('pagehide', () => { ust.removeEventListener('dragover', engelle); ust.removeEventListener('drop', engelle); });
+  } catch (e) {}
 
   // ---- eski mod: defterin kendi dugmesi ----
   let dersSuruyordu = false;

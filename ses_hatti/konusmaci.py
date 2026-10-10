@@ -72,7 +72,9 @@ def _model():
 
         secenek = ort.SessionOptions()
         secenek.log_severity_level = 3
-        _oturum = ort.InferenceSession(str(MODEL_YOLU), sess_options=secenek, providers=["CPUExecutionProvider"])
+        # Model bellekten verilir: proje klasörünün yolunda Türkçe karakter olsa da (ör. "Masaüstü") açılır
+        _oturum = ort.InferenceSession(MODEL_YOLU.read_bytes(), sess_options=secenek,
+                                       providers=["CPUExecutionProvider"])
     return _oturum
 
 
